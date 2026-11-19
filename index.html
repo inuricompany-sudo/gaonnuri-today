@@ -67,7 +67,9 @@
       font-size:12.5px;font-family:inherit;color:#3c4043;background:#fff;line-height:1.45}
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;align-items:flex-end;z-index:50}
     .modal.open{display:flex}
-    .sheetbox{width:100%;max-width:100%;max-height:84vh;overflow-y:auto;background:#fff;border-radius:16px 16px 0 0;
+    .modal{justify-content:center}
+    /* 폰 폭(≤430px)에서는 그대로 100%, 넓은 화면에서는 폰과 같은 폭의 카드로 보이게 */
+    .sheetbox{width:100%;max-width:430px;max-height:84vh;overflow-y:auto;background:#fff;border-radius:16px 16px 0 0;
       padding:16px 16px 22px}
     .sheetbox h2{margin:0 0 2px;font-size:16px}
     .sheetbox .meta{font-size:12px;color:#70757a;margin-bottom:12px}
