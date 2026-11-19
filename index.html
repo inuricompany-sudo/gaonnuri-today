@@ -347,7 +347,7 @@
       var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
       var smsClass = 'sms' + (it.checked ? ' hide' : '');
-      var smsDis = it.phone ? '' : ' disabled';
+      var smsDis = it.phone ? ' title="문자 보내기"' : ' title="전화번호가 없어 문자를 열 수 없어요"';
       var motherClass = 'mother' + (it.endToday ? ' end' : '');
       var motherTitle = it.endToday ? ' title="오늘 서비스 종료"' : '';
       return '<div class="row">' +
@@ -356,7 +356,7 @@
           '<span class="line"></span>' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
         '</div>' +
-        '<button class="' + smsClass + '" data-sms="' + idx + '" title="문자 보내기"' + smsDis + '>📩</button>' +
+        '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
         '<label class="chk">' +
           '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
           '<span class="mark">✓</span>' +
@@ -372,10 +372,10 @@
         var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
         var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
         var smsClass = 'sms' + (it.checked ? ' hide' : '');
-        var smsDis = it.phone ? '' : ' disabled';
+        var smsDis = it.phone ? ' title="문자 보내기"' : ' title="전화번호가 없어 문자를 열 수 없어요"';
         lines += '<div class="tline">' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
-          '<button class="' + smsClass + '" data-sms="' + idx + '" title="문자 보내기"' + smsDis + '>📩</button>' +
+          '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
           '<label class="chk">' +
             '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
             '<span class="mark">✓</span>' +
@@ -509,10 +509,10 @@
       var it = DATA.items[idx];
       if (!it) return;
       var num = String(it.phone || '').replace(/[^0-9]/g, '');
-      if (!num) { toast('전화번호가 없어 문자를 열 수 없어요'); return; }
       var tpl = (msgEl.value || '').trim() || DEFAULT_MSG;
       var body = tpl.split('{관리사}').join(it.caregiver).split('{산모}').join(it.mother);
       copyText(body);
+      if (!num) { toast('전화번호가 없어 문자 앱은 열 수 없어요. 문구는 복사했어요.'); return; }
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       var href = 'sm'+'s:' + num + (iOS ? '&body=' : '?body=') + encodeURIComponent(body);
       var a = document.createElement('a');
