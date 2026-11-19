@@ -247,6 +247,10 @@
     var SYNCING = false, PENDING = 0, LAST_LOAD = 0, MODAL = null, SYNC_GAP = 4000;
     /* v17: 모달의 '지난 날짜 소급 추가' 입력값 (다시 그려도 유지) */
     var RETRO = { mother: '', date: '', helper: '' };
+    /* v17: '삭제?' 확인 대기 상태 — 다시 그려도 유지되도록 화면이 아니라 여기에 둡니다.
+       key = '날짜|관리사', until = 이 시각(ms)까지 한 번 더 누르면 지웁니다. */
+    var DEL_ARM = { key: '', until: 0 };
+    function delArmed_(key) { return DEL_ARM.key === key && Date.now() < DEL_ARM.until; }
     var DEFAULT_MSG = '안녕하세요 관리사님, 오늘 바우처 카드 체크 확인 부탁드립니다.';
     var MSG_KEY = 'gn_card_msg';
     var PIN_KEY = 'gn_pin_v1';
@@ -842,7 +846,11 @@
           var cn = cares[ci].trim();
           if (!cn) continue;
           chips += '<span class="chip"><span class="cn">' + esc(cn) + '</span>' +
-            (isToday ? '' : '<button class="x" data-del="1" data-date="' + esc(full) + '" data-helper="' + esc(cn) + '" title="이 기록 지우기">✕</button>') +
+            (isToday ? '' : (function (k, d0, h0) {
+              var armed = delArmed_(k);
+              return '<button class="x' + (armed ? ' arm' : '') + '" data-del="1" data-armed="' + (armed ? '1' : '0') + '"' +
+                ' data-date="' + esc(d0) + '" data-helper="' + esc(h0) + '" title="이 기록 지우기">' + (armed ? '삭제?' : '✕') + '</button>';
+            })(full + '|' + cn, full, cn)) +
             '</span>';
         }
         rows += '<div class="mday">' +
@@ -958,24 +966,29 @@
           toast((e && e.message) || '저장하지 못했어요');
         });
     }
-    /* ✕ 한 번 = '삭제?' 로 바뀌고, 3초 안에 한 번 더 누르면 지웁니다. */
+    /* ✕ 한 번 = '삭제?' 로 바뀌고, 5초 안에 한 번 더 누르면 지웁니다. */
     function armDelete(btn) {
-      if (btn.getAttribute('data-armed') === '1') {
-        btn.removeAttribute('data-armed');
-        retroCall(btn.getAttribute('data-date'), btn.getAttribute('data-helper'), false);
+      var date = btn.getAttribute('data-date'), helper = btn.getAttribute('data-helper');
+      var key = date + '|' + helper;
+      if (delArmed_(key)) {                 // 두 번째 누름 → 지웁니다
+        DEL_ARM = { key: '', until: 0 };
+        retroCall(date, helper, false);
         return;
       }
+      DEL_ARM = { key: key, until: Date.now() + 5000 };
       btn.setAttribute('data-armed', '1');
       btn.classList.add('arm');
       btn.textContent = '삭제?';
       clearTimeout(btn._t);
       btn._t = setTimeout(function () {
         try {
-          btn.removeAttribute('data-armed');
-          btn.classList.remove('arm');
-          btn.textContent = '✕';
+          if (!delArmed_(key)) {
+            btn.setAttribute('data-armed', '0');
+            btn.classList.remove('arm');
+            btn.textContent = '✕';
+          }
         } catch (e) {}
-      }, 5000);
+      }, 5200);
     }
     document.addEventListener('click', function (ev) {
       var t = ev.target;
