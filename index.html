@@ -31,6 +31,11 @@
     .mother{text-align:right;font-size:13.5px;color:#202124;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis;min-width:0}
     .mother.end{color:#D93025;font-weight:700}
+    /* v14: 산모 이름을 누르면 카드체크 내역 모달 (크기·정렬은 그대로, 밑줄만 점선) */
+    .mother.tap{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;
+      text-decoration-thickness:1px;text-decoration-color:#c6ccc5;text-underline-offset:3px;
+      padding:3px 0;margin:-3px 0}
+    .mother.tap:active{opacity:.5}
     .line{height:2px;background:#ccd1cb;border-radius:2px;min-width:6px;max-width:100%}
     .care{text-align:left;font-size:13.5px;font-weight:600;color:#3c4043;white-space:nowrap;min-width:0;
       overflow:hidden;text-overflow:ellipsis;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
@@ -71,6 +76,21 @@
     .doc .nm{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .doc .dt{flex:0 0 auto;color:#8a8f8a;font-size:11.5px}
     .doc .st{flex:0 0 auto;font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap}
+    /* v14: 산모 카드체크 내역 */
+    .mcount{font-size:13.5px;color:#3c4043;margin:0 0 4px}
+    .mcount b{font-size:16px;color:#2e6b2e;margin:0 1px}
+    .mbreak{font-size:12px;color:#70757a;line-height:1.5}
+    .mnote{font-size:11.5px;color:#9aa09a;margin-top:2px;line-height:1.5}
+    .mlisthead{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:#70757a;
+      margin:12px 2px 0;padding-top:10px;border-top:1px solid #eef0ed}
+    .mday{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f3ef;font-size:13px}
+    .mday .dt{flex:0 0 auto;min-width:78px;font-weight:600;color:#3c4043;font-variant-numeric:tabular-nums}
+    .mday .dt .wd{font-weight:400;color:#8a8f8a}
+    .mday .cw{flex:1 1 auto;min-width:0;text-align:right;color:#2e6b2e;font-weight:600;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mday .tag{flex:0 0 auto;font-size:10.5px;font-weight:700;color:#2e6b2e;background:#e8f3e6;
+      border-radius:6px;padding:1px 5px;line-height:1.5}
+    .mnone{padding:24px 6px;text-align:center;color:#8a8f8a;font-size:13px;line-height:1.6}
     .st.ok{background:#e8f3e6;color:#2e6b2e}
     .st.expired{background:#fdecea;color:#D93025}
     .st.missing{background:#f1f3f4;color:#5f6368}
@@ -357,11 +377,11 @@
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
       var smsClass = 'sms' + (it.checked ? ' hide' : '');
       var smsDis = it.phone ? ' title="문자 보내기"' : ' title="전화번호가 없어 문자를 열 수 없어요"';
-      var motherClass = 'mother' + (it.endToday ? ' end' : '');
-      var motherTitle = it.endToday ? ' title="오늘 서비스 종료"' : '';
+      var motherClass = 'mother tap' + (it.endToday ? ' end' : '');
+      var motherTitle = it.endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"';
       return '<div class="row">' +
         '<div class="names">' +
-          '<span class="' + motherClass + '"' + motherTitle + '>' + esc(it.mother) + '</span>' +
+          '<span class="' + motherClass + '" data-mom="' + idx + '"' + motherTitle + '>' + esc(it.mother) + '</span>' +
           '<span class="line"></span>' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
         '</div>' +
@@ -391,11 +411,11 @@
           '</label>' +
         '</div>';
       }
-      var motherClass = 'mother' + (group[0].endToday ? ' end' : '');
-      var motherTitle = group[0].endToday ? ' title="오늘 서비스 종료"' : '';
+      var motherClass = 'mother tap' + (group[0].endToday ? ' end' : '');
+      var motherTitle = group[0].endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"';
       return '<div class="row twin">' +
         '<div class="mcell">' +
-          '<span class="' + motherClass + '"' + motherTitle + '>' + esc(group[0].mother) + '</span>' +
+          '<span class="' + motherClass + '" data-mom="' + startIdx + '"' + motherTitle + '>' + esc(group[0].mother) + '</span>' +
           '<span class="twinmark">쌍둥이</span>' +
         '</div>' +
         '<span class="line"></span>' +
@@ -537,6 +557,8 @@
     document.addEventListener('click', function (ev) {
       var sms = ev.target.closest ? ev.target.closest('.sms') : null;
       if (sms) { sendSms(Number(sms.dataset.sms)); return; }
+      var mom = ev.target.closest ? ev.target.closest('.mother[data-mom]') : null;
+      if (mom) { openMother(Number(mom.getAttribute('data-mom'))); return; }
       var btn = ev.target.closest ? ev.target.closest('.care') : null;
       if (btn) { openDocs(Number(btn.dataset.idx)); return; }
       if (ev.target.id === 'modal' || ev.target.id === 'closeModal') closeModal();
@@ -567,6 +589,61 @@
         '<div class="actions">' + drive + '<button class="btn" id="closeModal">닫기</button></div>';
       document.getElementById('modal').classList.add('open');
     }
+    /* v14: 산모 이름 → 근무표 기준 카드체크 일수·날짜별 내역 모달 */
+    function openMother(idx) {
+      var it = DATA.items[idx];
+      if (!it) return;
+      var st = (DATA.motherStats || {})[it.mother] || null;
+      var as = (DATA.motherAssign || {})[it.mother] || null;
+      var days = (st && st.days) ? st.days : [];
+      var total = st ? (st.totalDays || 0) : 0;
+      var recs = st ? (st.records || 0) : 0;
+      var months = [];
+      if (st && st.byMonth) {
+        for (var k in st.byMonth) if (st.byMonth.hasOwnProperty(k)) months.push(Number(k));
+      }
+      months.sort(function (a, b) { return a - b; });
+      var head = months.length ? (months.join('월+') + '월 총 ') : '';
+      var brk = [];
+      if (months.length > 1) {
+        var pp = [];
+        for (var i2 = 0; i2 < months.length; i2++) pp.push(months[i2] + '월 ' + st.byMonth[months[i2]].days + '일');
+        brk.push(pp.join(' · ') + ' · 기록 ' + recs + '건');
+      } else if (months.length === 1) {
+        brk.push('기록 ' + recs + '건');
+      }
+      if (as && (as.start || as.end)) {
+        brk.push('배정 ' + (as.start || '?') + ' ~ ' + (as.end || '진행 중'));
+      }
+      var note = '';
+      if (recs > total) note = '쌍둥이는 두 관리사가 같은 날 함께 체크하므로 하루로 셉니다.';
+      else if (as && (as.care1 || as.care2)) {
+        var cs = [];
+        if (as.care1) cs.push(as.care1 + (as.days1 ? ' ' + as.days1 + '일' : ''));
+        if (as.care2) cs.push(as.care2 + (as.days2 ? ' ' + as.days2 + '일' : ''));
+        note = '배정 관리사 ' + cs.join(' · ');
+      }
+      var rows = '';
+      for (var j = 0; j < days.length; j++) {
+        var d = days[j];
+        rows += '<div class="mday">' +
+          '<span class="dt">' + d.date + ' <span class="wd">(' + esc(d.dow) + ')</span></span>' +
+          '<span class="cw">' + esc(d.care) + '</span>' +
+          (d.n > 1 ? '<span class="tag">2명</span>' : '') +
+        '</div>';
+      }
+      if (!days.length) rows = '<div class="mnone">아직 근무표에 체크된 날이 없어요</div>';
+      document.getElementById('sheetbox').innerHTML =
+        '<h2>' + esc(it.mother) + (it.twin && it.groupSize > 1 ? ' <span class="twinmark">쌍둥이</span>' : '') + '</h2>' +
+        '<div class="mcount">' + (total ? head + '<b>' + total + '</b>일 체크' : '근무표 체크 0일') + '</div>' +
+        (brk.length ? '<div class="mbreak">' + esc(brk.join(' · ')) + '</div>' : '') +
+        (note ? '<div class="mnote">' + esc(note) + '</div>' : '') +
+        '<div class="mlisthead"><span>날짜별 체크</span><span>' + (days.length ? '최신순' : '') + '</span></div>' +
+        rows +
+        '<div class="actions"><button class="btn primary" id="closeModal">닫기</button></div>';
+      document.getElementById('modal').classList.add('open');
+    }
+
     function closeModal() {
       document.getElementById('modal').classList.remove('open');
     }
