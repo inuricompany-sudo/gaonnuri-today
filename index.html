@@ -51,6 +51,14 @@
       border:1.5px solid #c8cec7;background:#fff;color:transparent;font-size:13px;font-weight:700}
     .chk input:checked + .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
     .chk input:disabled + .mark{opacity:.55}
+    /* v16: '일반' 신청 산모 — 처음부터 완료(☑) 상태로 고정 */
+    .chk.fixed{cursor:default}
+    .chk.fixed .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
+    /* v16: 모달의 '일반' 배지 (쌍둥이 배지와 같은 모양) */
+    .nbadge{font-size:10px;font-weight:700;color:#2f4f6f;background:#e8eef6;border-radius:6px;
+      padding:1px 5px;line-height:1.4}
+    .nnote{font-size:12.5px;color:#3c4043;background:#f3f6f2;border:1px solid #e4eae2;
+      border-radius:10px;padding:9px 10px;margin:2px 0 4px;line-height:1.5}
     /* 쌍둥이 행: 왼쪽 산모 칸과 연결선 폭은 일반 행과 같고, 세 번째 칸이
        관리사 칸 + 📩 + 체크박스를 모두 담습니다. (관리사 이름 시작선이 일반 행과 일치) */
     .row.twin{padding:7px 10px;grid-template-columns:var(--mw) minmax(6px,1fr) calc(var(--mw) + var(--side))}
@@ -386,10 +394,12 @@
     function rowHtml(it, idx) {
       var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
-      var smsClass = 'sms' + (it.checked ? ' hide' : '');
+      var fixed = !!it.isNormal;                       // v16: 일반 산모
+      var smsClass = 'sms' + (it.checked || fixed ? ' hide' : '');
       var smsDis = it.phone ? ' title="문자 보내기"' : ' title="전화번호가 없어 문자를 열 수 없어요"';
       var motherClass = 'mother tap' + (it.endToday ? ' end' : '');
-      var motherTitle = it.endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"';
+      var motherTitle = fixed ? ' title="일반 신청 산모 · 눌러서 자세히"'
+        : (it.endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"');
       return '<div class="row">' +
         '<div class="names">' +
           '<span class="' + motherClass + '" data-mom="' + idx + '"' + motherTitle + '>' + esc(it.mother) + '</span>' +
@@ -397,7 +407,7 @@
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
         '</div>' +
         '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
-        '<label class="chk">' +
+        '<label class="chk' + (fixed ? ' fixed' : '') + '"' + (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '') + '>' +
           '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
           '<span class="mark">✓</span>' +
         '</label>' +
@@ -411,19 +421,22 @@
         var it = group[g], idx = startIdx + g;
         var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
         var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
-        var smsClass = 'sms' + (it.checked ? ' hide' : '');
+        var fixed = !!it.isNormal;                       // v16: 일반 산모
+        var smsClass = 'sms' + (it.checked || fixed ? ' hide' : '');
         var smsDis = it.phone ? ' title="문자 보내기"' : ' title="전화번호가 없어 문자를 열 수 없어요"';
         lines += '<div class="tline">' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
           '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
-          '<label class="chk">' +
+          '<label class="chk' + (fixed ? ' fixed' : '') + '"' + (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '') + '>' +
             '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
             '<span class="mark">✓</span>' +
           '</label>' +
         '</div>';
       }
+      var gfixed = !!group[0].isNormal;
       var motherClass = 'mother tap' + (group[0].endToday ? ' end' : '');
-      var motherTitle = group[0].endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"';
+      var motherTitle = gfixed ? ' title="일반 신청 산모 · 눌러서 자세히"'
+        : (group[0].endToday ? ' title="오늘 서비스 종료 · 눌러서 카드체크 내역"' : ' title="눌러서 카드체크 내역"');
       return '<div class="row twin">' +
         '<div class="mcell">' +
           '<span class="' + motherClass + '" data-mom="' + startIdx + '"' + motherTitle + '>' + esc(group[0].mother) + '</span>' +
@@ -627,6 +640,14 @@
       var idx = Number(cb.dataset.idx);
       var it = DATA.items[idx];
       if (!it) return;
+      // v16: '일반' 신청 산모는 카드체크 대상이 아니므로 시트에 쓰지 않고 완료 상태를 유지합니다.
+      if (it.isNormal) {
+        cb.checked = true;
+        it.checked = true;
+        updateCount();
+        toast('일반 산모는 카드체크가 필요 없어 완료로 표시돼요');
+        return;
+      }
       var want = cb.checked;
       var mother = it.mother, caregiver = it.caregiver;
       var smsBtn = document.querySelector('.sms[data-sms="' + cb.dataset.idx + '"]');
@@ -794,10 +815,15 @@
           (d.n > 1 ? '<span class="tag">2명</span>' : '') +
         '</div>';
       }
-      if (!days.length) rows = '<div class="mnone">아직 근무표에 체크된 날이 없어요</div>';
+      var isNormal = !!it.isNormal;
+      if (!days.length) rows = '<div class="mnone">' + (isNormal ? '일반 산모라 근무표 카드체크 기록이 없어요' : '아직 근무표에 체크된 날이 없어요') + '</div>';
       document.getElementById('sheetbox').innerHTML =
-        '<h2>' + esc(it.mother) + (it.twin && it.groupSize > 1 ? ' <span class="twinmark">쌍둥이</span>' : '') + '</h2>' +
-        '<div class="mcount">' + (total ? head + '<b>' + total + '</b>일 체크' : '근무표 체크 0일') + '</div>' +
+        '<h2>' + esc(it.mother) + (it.twin && it.groupSize > 1 ? ' <span class="twinmark">쌍둥이</span>' : '') +
+          (isNormal ? ' <span class="nbadge">일반</span>' : '') + '</h2>' +
+        (isNormal
+          ? '<div class="mcount">바우처 카드체크 대상 아님 · 앱에서 완료(☑)로 표시</div>' +
+            '<div class="nnote">일반 신청 산모는 바우처 카드체크 대상이 아니에요.</div>'
+          : '<div class="mcount">' + (total ? head + '<b>' + total + '</b>일 체크' : '근무표 체크 0일') + '</div>') +
         (brk.length ? '<div class="mbreak">' + esc(brk.join(' · ')) + '</div>' : '') +
         (note ? '<div class="mnote">' + esc(note) + '</div>' : '') +
         '<div class="mlisthead"><span>날짜별 체크</span><span>' + (days.length ? '최신순' : '') + '</span></div>' +
