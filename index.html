@@ -100,6 +100,29 @@
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .mday .tag{flex:0 0 auto;font-size:10.5px;font-weight:700;color:#2e6b2e;background:#e8f3e6;
       border-radius:6px;padding:1px 5px;line-height:1.5}
+    /* v17: 날짜별 관리사 칸 + 소급 기록 삭제(✕) */
+    .mday .chs{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;
+      align-items:center;min-width:0}
+    .chip{display:inline-flex;align-items:center;gap:3px;min-width:0;max-width:100%}
+    .chip .cn{color:#2e6b2e;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chip .x{flex:0 0 auto;width:20px;height:20px;border:1px solid #e3e6e2;background:#f7f8f6;
+      color:#8a8f8a;border-radius:6px;font-size:10px;line-height:1;padding:0;font-family:inherit}
+    .chip .x:active{background:#fdecea;border-color:#f3c9c4;color:#D93025}
+    .chip .x.arm{width:auto;padding:0 6px;background:#fdecea;border-color:#f3c9c4;color:#D93025;
+      font-size:10.5px;font-weight:700}
+    /* v17: 모달 안 '지난 날짜 소급 추가' */
+    .retro{margin:14px 0 2px;padding:11px 11px 10px;border:1px solid #e4eae2;background:#f7f9f6;
+      border-radius:12px}
+    .retro .rtitle{font-size:12px;font-weight:700;color:#1f3d18;margin-bottom:7px}
+    .retro .rrow{display:flex;gap:6px;align-items:center}
+    .retro input[type=date]{flex:1 1 0;min-width:0;height:36px;border:1px solid #dde1dc;border-radius:9px;
+      background:#fff;padding:0 8px;font-size:12.5px;font-family:inherit;color:#3c4043}
+    .retro select{flex:1 1 0;min-width:0;height:36px;border:1px solid #dde1dc;border-radius:9px;
+      background:#fff;padding:0 6px;font-size:12.5px;font-family:inherit;color:#3c4043}
+    .retro .rbtn{width:100%;margin-top:7px;height:38px;border:1px solid #2e7d32;background:#2e7d32;
+      color:#fff;border-radius:10px;font-size:13px;font-weight:700;font-family:inherit}
+    .retro .rbtn[disabled]{opacity:.6}
+    .retro .rhint{font-size:10.5px;color:#9aa09a;margin-top:6px;line-height:1.5}
     .mnone{padding:24px 6px;text-align:center;color:#8a8f8a;font-size:13px;line-height:1.6}
     .st.ok{background:#e8f3e6;color:#2e6b2e}
     .st.expired{background:#fdecea;color:#D93025}
@@ -222,6 +245,8 @@
        · MODAL     — 열려 있는 패널 { kind:'docs'|'mother', key:이름 }
        · SYNC_GAP  — 화면 복귀 시 이 시간(ms)이 지났으면 다시 읽습니다. */
     var SYNCING = false, PENDING = 0, LAST_LOAD = 0, MODAL = null, SYNC_GAP = 4000;
+    /* v17: 모달의 '지난 날짜 소급 추가' 입력값 (다시 그려도 유지) */
+    var RETRO = { mother: '', date: '', helper: '' };
     var DEFAULT_MSG = '안녕하세요 관리사님, 오늘 바우처 카드 체크 확인 부탁드립니다.';
     var MSG_KEY = 'gn_card_msg';
     var PIN_KEY = 'gn_pin_v1';
@@ -806,13 +831,23 @@
         if (as.care2) cs.push(as.care2 + (as.days2 ? ' ' + as.days2 + '일' : ''));
         note = '배정 관리사 ' + cs.join(' · ');
       }
+      var tp = todayParts();
       var rows = '';
       for (var j = 0; j < days.length; j++) {
         var d = days[j];
+        var isToday = tp && d.m === tp.m && d.d === tp.d;
+        var full = fullDate_(d);
+        var cares = String(d.care || '').split(' · '), chips = '';
+        for (var ci = 0; ci < cares.length; ci++) {
+          var cn = cares[ci].trim();
+          if (!cn) continue;
+          chips += '<span class="chip"><span class="cn">' + esc(cn) + '</span>' +
+            (isToday ? '' : '<button class="x" data-del="1" data-date="' + esc(full) + '" data-helper="' + esc(cn) + '" title="이 기록 지우기">✕</button>') +
+            '</span>';
+        }
         rows += '<div class="mday">' +
           '<span class="dt">' + d.date + ' <span class="wd">(' + esc(d.dow) + ')</span></span>' +
-          '<span class="cw">' + esc(d.care) + '</span>' +
-          (d.n > 1 ? '<span class="tag">2명</span>' : '') +
+          '<span class="chs">' + chips + (d.n > 1 ? '<span class="tag">2명</span>' : '') + '</span>' +
         '</div>';
       }
       var isNormal = !!it.isNormal;
@@ -828,6 +863,7 @@
         (note ? '<div class="mnote">' + esc(note) + '</div>' : '') +
         '<div class="mlisthead"><span>날짜별 체크</span><span>' + (days.length ? '최신순' : '') + '</span></div>' +
         rows +
+        retroHtml(it, st) +
         '<div class="actions"><button class="btn primary" id="closeModal">닫기</button></div>';
       document.getElementById('modal').classList.add('open');
     }
@@ -836,6 +872,128 @@
       MODAL = null;
       document.getElementById('modal').classList.remove('open');
     }
+
+    /* ── v17: 지난 날짜 소급 추가 ─────────────────────────────────────
+       그 날짜가 속한 달의 근무표에서 관리사 행 × 그 일자 칸에 산모 이름을 적고,
+       시트에서는 그 칸 글자만 파랗게 표시합니다. (앱 화면에는 색 구분 없음) */
+    function appYear() {
+      var m = String(DATA.dateLabel || '').match(/(\d{4})-/);
+      return m ? m[1] : String(new Date().getFullYear());
+    }
+    function pad2_(n) { return (n < 10 ? '0' : '') + n; }
+    function fullDate_(d) { return appYear() + '-' + pad2_(d.m) + '-' + pad2_(d.d); }
+    function yesterdayStr() {
+      var m = String(DATA.dateLabel || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+      var base = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+      base.setDate(base.getDate() - 1);
+      return base.getFullYear() + '-' + pad2_(base.getMonth() + 1) + '-' + pad2_(base.getDate());
+    }
+    function minDateStr(st) {
+      var earliest = 0;
+      if (st && st.byMonth) {
+        for (var k in st.byMonth) if (st.byMonth.hasOwnProperty(k)) {
+          var mm = Number(k);
+          if (mm && (!earliest || mm < earliest)) earliest = mm;
+        }
+      }
+      if (!earliest) { var tp = todayParts(); earliest = tp ? tp.m : 1; }
+      return appYear() + '-' + pad2_(earliest) + '-01';
+    }
+    function helperListFor(it) {
+      var out = [], i, rows = DATA.items || [];
+      for (i = 0; i < rows.length; i++) {
+        if (rows[i].mother === it.mother && rows[i].caregiver && out.indexOf(rows[i].caregiver) < 0) out.push(rows[i].caregiver);
+      }
+      var as = (DATA.motherAssign || {})[it.mother];
+      if (as) {
+        if (as.care1 && out.indexOf(as.care1) < 0) out.push(as.care1);
+        if (as.care2 && out.indexOf(as.care2) < 0) out.push(as.care2);
+      }
+      if (!out.length && it.caregiver) out.push(it.caregiver);
+      return out;
+    }
+    function retroHtml(it, st) {
+      if (it.isNormal) return '';
+      if (RETRO.mother !== it.mother) { RETRO = { mother: it.mother, date: '', helper: '' }; }
+      var helpers = helperListFor(it), opts = '', i;
+      for (i = 0; i < helpers.length; i++) {
+        opts += '<option value="' + esc(helpers[i]) + '"' + (RETRO.helper === helpers[i] ? ' selected' : '') + '>' + esc(helpers[i]) + '</option>';
+      }
+      if (!RETRO.helper && helpers.length) RETRO.helper = helpers[0];
+      return '<div class="retro">' +
+        '<div class="rtitle">지난 날짜 소급 추가</div>' +
+        '<div class="rrow">' +
+          '<input type="date" id="retroDate" value="' + esc(RETRO.date || yesterdayStr()) + '" min="' + esc(minDateStr(st)) + '" max="' + esc(yesterdayStr()) + '">' +
+          '<select id="retroHelper">' + opts + '</select>' +
+        '</div>' +
+        '<button class="rbtn" id="retroAdd">+ 소급 추가</button>' +
+        '<div class="rhint">그 날짜 칸의 산모 이름이 근무표에서 파랗게 표시됩니다. 어제까지 넣을 수 있어요.</div>' +
+      '</div>';
+    }
+    function setRetroBusy(on, label) {
+      var btn = document.getElementById('retroAdd');
+      if (!btn) return;
+      btn.disabled = !!on;
+      btn.textContent = on ? (label || '저장 중…') : '+ 소급 추가';
+    }
+    function retroCall(date, helper, checked) {
+      var mother = (MODAL && MODAL.kind === 'mother') ? MODAL.key : '';
+      if (!mother) return;
+      if (!date || !helper) { toast('날짜와 관리사를 골라 주세요'); return; }
+      setRetroBusy(true, checked ? '추가 중…' : '삭제 중…');
+      PENDING++;
+      callApi({ action: 'retroCard', pin: PIN, date: date, mother: mother, caregiver: helper, checked: !!checked })
+        .then(function (r) {
+          PENDING--;
+          setRetroBusy(false);
+          if (!r || !r.ok) { toast((r && r.message) || '저장하지 못했어요'); return; }
+          mergeServerStats(r, mother);
+          RETRO.mother = mother; RETRO.date = date; RETRO.helper = helper;
+          if (checked) toast(r.already ? (r.message || '이미 그 날짜에 기록돼 있어요') : '소급 기록을 추가했어요');
+          else toast('기록을 지웠어요');
+          refreshModal();
+        }, function (e) {
+          PENDING--;
+          setRetroBusy(false);
+          toast((e && e.message) || '저장하지 못했어요');
+        });
+    }
+    /* ✕ 한 번 = '삭제?' 로 바뀌고, 3초 안에 한 번 더 누르면 지웁니다. */
+    function armDelete(btn) {
+      if (btn.getAttribute('data-armed') === '1') {
+        btn.removeAttribute('data-armed');
+        retroCall(btn.getAttribute('data-date'), btn.getAttribute('data-helper'), false);
+        return;
+      }
+      btn.setAttribute('data-armed', '1');
+      btn.classList.add('arm');
+      btn.textContent = '삭제?';
+      clearTimeout(btn._t);
+      btn._t = setTimeout(function () {
+        try {
+          btn.removeAttribute('data-armed');
+          btn.classList.remove('arm');
+          btn.textContent = '✕';
+        } catch (e) {}
+      }, 3000);
+    }
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      if (t.id === 'retroAdd') { var v = retroInput(); retroCall(v.date, v.helper, true); return; }
+      var x = t.closest('.x[data-del]');
+      if (x) { ev.preventDefault(); armDelete(x); return; }
+    });
+    function retroInput() {
+      var dEl = document.getElementById('retroDate'), hEl = document.getElementById('retroHelper');
+      return { date: dEl ? dEl.value : '', helper: hEl ? hEl.value : '' };
+    }
+    document.addEventListener('input', function (ev) {
+      if (ev.target && ev.target.id === 'retroDate') RETRO.date = ev.target.value;
+    });
+    document.addEventListener('change', function (ev) {
+      if (ev.target && ev.target.id === 'retroHelper') RETRO.helper = ev.target.value;
+    });
 
     if (location.search.indexOf('diag=1') >= 0) {
       setTimeout(function () {
