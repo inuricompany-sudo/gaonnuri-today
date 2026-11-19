@@ -896,11 +896,17 @@
       base.setDate(base.getDate() - 1);
       return base.getFullYear() + '-' + pad2_(base.getMonth() + 1) + '-' + pad2_(base.getDate());
     }
+    /* 소급 날짜의 가장 이른 날 — 서버가 알려 준 [N월근무표] 달 중 가장 앞 달의 1일 */
     function minDateStr(st) {
-      var earliest = 0;
-      if (st && st.byMonth) {
+      var earliest = 0, i, mm;
+      var ms = DATA.retroMonths || [];
+      for (i = 0; i < ms.length; i++) {
+        mm = Number(ms[i]);
+        if (mm && (!earliest || mm < earliest)) earliest = mm;
+      }
+      if (!earliest && st && st.byMonth) {
         for (var k in st.byMonth) if (st.byMonth.hasOwnProperty(k)) {
-          var mm = Number(k);
+          mm = Number(k);
           if (mm && (!earliest || mm < earliest)) earliest = mm;
         }
       }
