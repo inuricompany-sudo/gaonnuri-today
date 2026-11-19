@@ -22,6 +22,7 @@
     .names{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0}
     .mother{flex:0 0 34%;text-align:right;font-size:13.5px;color:#202124;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis}
+    .mother.end{color:#D93025;font-weight:700}
     .line{flex:1 1 auto;height:2px;background:#ccd1cb;border-radius:2px;min-width:6px}
     .care{flex:0 0 34%;text-align:left;font-size:13.5px;font-weight:600;color:#3c4043;white-space:nowrap;
       overflow:hidden;text-overflow:ellipsis;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
@@ -37,6 +38,13 @@
       border:1.5px solid #c8cec7;background:#fff;color:transparent;font-size:13px;font-weight:700}
     .chk input:checked + .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
     .chk input:disabled + .mark{opacity:.55}
+    .row.twin{padding:7px 10px;align-items:stretch}
+    .mcell{flex:0 0 34%;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;min-width:0}
+    .twinmark{font-size:10px;font-weight:700;color:#2e6b2e;background:#e8f3e6;border-radius:6px;padding:1px 5px;line-height:1.4}
+    .tlist{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px}
+    .tline{display:flex;align-items:center;gap:8px;min-width:0}
+    .tline + .tline{border-top:1px dashed #ecefea;padding-top:5px}
+    .tline .care{flex:1 1 auto;min-width:0}
     .empty{text-align:center;color:#8a8f8a;font-size:13px;padding:28px 16px}
     .msgbox{padding:2px 12px 24px}
     .mlbl{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#70757a;margin:0 2px 5px}
@@ -340,9 +348,11 @@
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
       var smsClass = 'sms' + (it.checked ? ' hide' : '');
       var smsDis = it.phone ? '' : ' disabled';
+      var motherClass = 'mother' + (it.endToday ? ' end' : '');
+      var motherTitle = it.endToday ? ' title="오늘 서비스 종료"' : '';
       return '<div class="row">' +
         '<div class="names">' +
-          '<span class="mother">' + esc(it.mother) + '</span>' +
+          '<span class="' + motherClass + '"' + motherTitle + '>' + esc(it.mother) + '</span>' +
           '<span class="line"></span>' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
         '</div>' +
@@ -354,6 +364,35 @@
       '</div>';
     }
 
+    /* 쌍둥이: 산모 한 칸 안에 관리사 두 명을 위아래로 묶습니다. */
+    function twinHtml(group, startIdx) {
+      var lines = '';
+      for (var g = 0; g < group.length; g++) {
+        var it = group[g], idx = startIdx + g;
+        var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
+        var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
+        var smsClass = 'sms' + (it.checked ? ' hide' : '');
+        var smsDis = it.phone ? '' : ' disabled';
+        lines += '<div class="tline">' +
+          '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
+          '<button class="' + smsClass + '" data-sms="' + idx + '" title="문자 보내기"' + smsDis + '>📩</button>' +
+          '<label class="chk">' +
+            '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
+            '<span class="mark">✓</span>' +
+          '</label>' +
+        '</div>';
+      }
+      var motherClass = 'mother' + (group[0].endToday ? ' end' : '');
+      var motherTitle = group[0].endToday ? ' title="오늘 서비스 종료"' : '';
+      return '<div class="row twin">' +
+        '<div class="mcell">' +
+          '<span class="' + motherClass + '"' + motherTitle + '>' + esc(group[0].mother) + '</span>' +
+          '<span class="twinmark">쌍둥이</span>' +
+        '</div>' +
+        '<div class="tlist">' + lines + '</div>' +
+      '</div>';
+    }
+
     function render(data) {
       DATA = data;
       document.getElementById('dateLabel').textContent = data.dateLabel || '';
@@ -362,7 +401,26 @@
         list.innerHTML = '<div class="empty">오늘 배정이 없습니다.</div>';
       } else {
         var html = '';
-        for (var i = 0; i < data.items.length; i++) html += rowHtml(data.items[i], i);
+        var items = data.items;
+        var i = 0;
+        while (i < items.length) {
+          var it = items[i];
+          if (it.twin && it.groupSize > 1) {
+            var group = [it];
+            var j = i + 1;
+            while (j < items.length && items[j].twin && items[j].groupSize > 1 && items[j].mother === it.mother) {
+              group.push(items[j]);
+              j++;
+            }
+            if (group.length > 1) {
+              html += twinHtml(group, i);
+              i = j;
+              continue;
+            }
+          }
+          html += rowHtml(it, i);
+          i++;
+        }
         list.innerHTML = html;
       }
       updateCount();
