@@ -527,6 +527,16 @@
     window.addEventListener('focus', function () { syncQuiet(false); });
     window.addEventListener('pageshow', function () { syncQuiet(false); });
 
+    /* v15: 화면이 켜져 있는 동안 30초마다 가볍게 최신 상태를 확인합니다.
+       (숨김·잠금·저장 중에는 쉼 → 사용 한도를 아낌) */
+    var SYNC_TICK = 30000;
+    setInterval(function () {
+      if (!PIN || PIN_BUSY || SYNCING || PENDING > 0) return;
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      if (Date.now() - LAST_LOAD < SYNC_TICK - 5000) return;
+      syncQuiet(true);
+    }, SYNC_TICK);
+
     document.getElementById('reload').addEventListener('cl'+'ick', load);
     document.getElementById('lockBtn').addEventListener('cl'+'ick', function () { lockNow(); });
     document.getElementById('remember').addEventListener('change', function () {
