@@ -7,6 +7,11 @@
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
+var CLOSE_PDF = 'close.pdf';
+/* 문서 종류: 관리사님 계약서식(contract) / 서비스 종료안내문(close) */
+var FORM = 'contract';
+function isClose() { return FORM === 'close'; }
+function docPdf() { return isClose() ? CLOSE_PDF : CONTRACT_PDF; }
 var PW = 595, PH = 841;          // A4 (pt)
 var OV = 4;                      // 입력 글자 오버레이 해상도(1pt=4px ≈ 288dpi)
 var FONT = '"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo","NanumGothic",sans-serif';
@@ -67,8 +72,8 @@ if (window.pdfjsLib) {
 function contractBytes() {
   if (_bytes) return Promise.resolve(_bytes);
   if (_bytesJob) return _bytesJob;
-  _bytesJob = fetch(CONTRACT_PDF).then(function (r) {
-    if (!r.ok) throw new Error('contract_fetch');
+  _bytesJob = fetch(docPdf()).then(function (r) {
+    if (!r.ok) throw new Error('doc_fetch');
     return r.arrayBuffer();
   }).then(function (b) { _bytes = new Uint8Array(b); return _bytes; })
     .catch(function (e) { _bytesJob = null; throw e; });
@@ -105,7 +110,7 @@ function pageImage(pno) {   // 화면용 이미지 캐시(~170dpi)
 }
 
 /* ---------------- 필드/값 ---------------- */
-var S = { checks: {}, signs: {}, filledFirst: false };
+var S = { checks: {}, signs: {}, opts: {}, texts: {}, filledFirst: false };
 var PAGES = [];
 var fieldEls = {}, pageEls = {}, pageW = 360;
 
@@ -113,12 +118,22 @@ function branchPages(branch) { return branch === '논산' ? [1, 3, 6, 7] : [1, 2
 function reqFields() {
   return FIELDS.filter(function (f) { return f.req && PAGES.indexOf(f.p) >= 0; });
 }
-function isDone(f) { return f.t === 'check' ? !!S.checks[f.id] : !!S.signs[f.id]; }
+function isDone(f) {
+  if (f.t === 'check') return !!S.checks[f.id];
+  if (f.t === 'radio') return S.opts[f.id] != null;
+  if (f.t === 'sign') return !!S.signs[f.id];
+  return false;
+}
 function doneCount() {
   var n = 0; reqFields().forEach(function (f) { if (isDone(f)) n++; }); return n;
 }
 function valOf(f, c) {
   var t = todayParts();
+  var pf = (c && c.prefill) || {};
+  if (f.src && f.src.indexOf('p:') === 0) {
+    var k0 = f.src.slice(2);
+    return pf[k0] == null ? '' : String(pf[k0]);
+  }
   switch (f.src) {
     case 'name': return c.name || '';
     case 'jumin': return c.jumin || '';
@@ -159,7 +174,9 @@ function showRecipient(token) {
       return;
     }
     CT = r.contract; CO = r.company || {};
-    S = { checks: {}, signs: {}, filledFirst: false };
+    FORM = /종료/.test(CT.type || '') ? 'close' : 'contract';
+    FIELDS = isClose() ? CLOSE_FIELDS : CONTRACT_FIELDS;
+    S = { checks: {}, signs: {}, opts: {}, texts: {}, filledFirst: false };
     CONSENT_OK = false; CONSENT_AT = '';
     if (CT.status === '완료') { showAlreadyDone(); return; }
     showIntro();
@@ -172,12 +189,12 @@ function showAlreadyDone() {
   app.innerHTML = '';
   app.appendChild(el(
     '<div>' +
-    '<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
     '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:26px 16px">' +
     '<div style="font-size:38px;line-height:1">✅</div>' +
-    '<h2 style="margin-top:10px">이미 서명이 완료된 계약서입니다</h2>' +
+    '<h2 style="margin-top:10px">이미 서명이 완료된 문서입니다</h2>' +
     '<p class="muted" style="margin:6px 0 0">' + esc(parts[0] || '') + ' ' + esc(parts[1] || '') + ' 완료</p>' +
     '</div>' +
     summaryCard() +
@@ -187,7 +204,7 @@ function summaryCard() {
   return '<div class="card"><h2>계약 내용</h2>' +
     '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CO.branch || CT.branch) + '지사</span></div>' +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
-    '<div class="kv"><span class="k">계약기간</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
+    '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '</div>';
 }
 
@@ -198,8 +215,10 @@ function summaryCard() {
 var CONSENT_OK = false, CONSENT_AT = '';
 
 function docTitle() {
+  if (isClose()) return CT.type || '서비스 종료안내문';
   return (CT.type || '관리사님 계약서식') + ' (' + (CO.branch || CT.branch) + '지사)';
 }
+function periodLabel() { return isClose() ? '서비스기간' : '계약기간'; }
 function fmtYMD(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function deadlineOf() {   // 문서 제출 기한: 생성일 + 7일
   var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(CT.created || ''));
@@ -224,7 +243,8 @@ function showIntro() {
     '<div class="row"><span class="k">문서 제목 :</span><span class="v">' + esc(docTitle()) + '</span></div>' +
     '<div class="row"><span class="k">보낸 사람 :</span><span class="v">가온누리산후도우미</span></div>' +
     '<div class="row"><span class="k">수신인 :</span><span class="v">' + esc(CT.name) + '님</span></div>' +
-    '<div class="row"><span class="k">계약기간 :</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
+    (isClose() && (CT.prefill || {}).voucher ? '<div class="row"><span class="k">이용유형 :</span><span class="v">' + esc(CT.prefill.voucher) + ((CT.prefill || {}).term ? ' · ' + esc(CT.prefill.term) : '') + '</span></div>' : '') +
+    '<div class="row"><span class="k">' + periodLabel() + ' :</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '</div>' +
     '<div class="policy">' +
     '<h3>개인정보처리방침</h3>' +
@@ -300,12 +320,12 @@ function showConsentDetails() {
 }
 
 function buildRecipientUi() {
-  PAGES = branchPages(CT.branch);
+  PAGES = isClose() ? CLOSE_PAGES.slice(0) : branchPages(CT.branch);
   fieldEls = {}; pageEls = {};
   app.innerHTML = '';
   var top = el(
     '<header class="top">' +
-    '<div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
+    '<div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
     '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + ' · ' + esc(CT.start) + '~' + esc(CT.end) + '</div></div>' +
     '<div class="zoom"><button data-z="1" class="on">맞춤</button><button data-z="1.5">확대</button><button data-z="2.1">크게</button></div>' +
     '</header>');
@@ -316,7 +336,7 @@ function buildRecipientUi() {
 
   var bar = el(
     '<div class="bottombar" id="bar">' +
-    '<div class="prog"><div class="pl" id="pl">필수 입력 항목 <span>(0/5)</span></div><div class="pips" id="pips"></div></div>' +
+    '<div class="prog"><div class="pl" id="pl">필수 입력 항목 <span>(0/' + reqFields().length + ')</span></div><div class="pips" id="pips"></div></div>' +
     '<button id="nextBtn">입력 시작</button>' +
     '</div>');
   app.appendChild(bar);
@@ -357,6 +377,17 @@ function buildField(f) {
     var v = valOf(f, CT);
     node.querySelector('.val').textContent = v;
     node.title = v;
+  } else if (f.t === 'radio') {
+    node = el('<div class="f radio" style="' + styles + '"></div>');
+    f.rows.forEach(function (ry, i) {
+      var o = el('<div class="opt"><span class="box"></span></div>');
+      o.addEventListener('click', function () { pickOpt(f, i); });
+      node.appendChild(o);
+    });
+  } else if (f.t === 'area') {
+    node = el('<div class="f area" style="' + styles + '">' +
+      '<span class="ph">눌러서 의견을 입력해 주세요 (선택)</span><span class="val"></span></div>');
+    node.addEventListener('click', function () { openArea(f); });
   } else if (f.t === 'check') {
     node = el('<div class="f chk" style="' + styles + '" role="checkbox" aria-checked="false">' +
       '<span class="box"></span>' +
@@ -379,6 +410,42 @@ function buildField(f) {
   return node;
 }
 
+/* 모니터링 문항: 한 문항(그룹) 안에서 하나만 선택 */
+function pickOpt(f, i) {
+  S.opts[f.id] = i;
+  var n = fieldEls[f.id];
+  if (n) {
+    Array.prototype.forEach.call(n.children, function (o, j) { o.classList.toggle('on', j === i); });
+  }
+  updateBar();
+}
+function openArea(f) {
+  var sheet = el('<div class="sheet"><div class="panel">' +
+    '<h3>이용자 의견</h3>' +
+    '<div class="muted small">만족하셨던 점, 불편하셨던 점을 자유롭게 적어 주세요. (선택)</div>' +
+    '<textarea class="areainput" id="areaIn" rows="6" placeholder="예: 관리사님이 친절하셨고 신생아 돌봄에 큰 도움이 되었습니다."></textarea>' +
+    '<div class="row2" style="margin-top:10px"><button class="btn gray" id="cancel">취소</button><button class="btn" id="ok">입력 완료</button></div>' +
+    '</div></div>');
+  document.body.appendChild(sheet);
+  var ta = sheet.querySelector('#areaIn');
+  ta.value = S.texts[f.id] || '';
+  setTimeout(function () { try { ta.focus(); } catch (e) { } }, 80);
+  sheet.querySelector('#cancel').addEventListener('click', function () { sheet.remove(); });
+  sheet.querySelector('#ok').addEventListener('click', function () {
+    S.texts[f.id] = ta.value.trim();
+    paintArea(f);
+    sheet.remove();
+    updateBar();
+  });
+}
+function paintArea(f) {
+  var n = fieldEls[f.id]; if (!n) return;
+  var v = S.texts[f.id] || '';
+  n.querySelector('.val').textContent = v;
+  n.classList.toggle('on', !!v);
+  layoutArea(f, n);
+}
+
 function layoutDoc() {
   var wrap = $('#docwrap'); if (!wrap) return;
   var avail = Math.min(wrap.clientWidth - 20, 660);
@@ -394,8 +461,34 @@ function layoutDoc() {
       var size = fitFont(v, f.w, f.h);
       var sp = n.querySelector('.val');
       sp.style.fontSize = (size * k).toFixed(2) + 'px';
+    } else if (f.t === 'radio') {
+      layoutRadio(f, n, k);
+    } else if (f.t === 'area') {
+      layoutArea(f, n);
     }
   });
+}
+function layoutRadio(f, n, k) {
+  var size = Math.max(16, Math.min(24, f.bw * k * 2.4));
+  var cx = (f.bx + f.bw / 2 - f.x) * k;
+  var rowH = Math.max(f.gap * k * 1.7, 20);
+  Array.prototype.forEach.call(n.children, function (o, i) {
+    var cy = (f.rows[i] - f.y) * k;
+    o.style.top = (cy - rowH / 2).toFixed(2) + 'px';
+    o.style.height = rowH.toFixed(2) + 'px';
+    var box = o.querySelector('.box');
+    box.style.width = size + 'px';
+    box.style.height = size + 'px';
+    box.style.left = (cx - size / 2).toFixed(1) + 'px';
+  });
+}
+function layoutArea(f, n) {
+  var wrapEl = $('#docwrap');
+  var k = wrapEl ? (pageW / PW) : 0.6;
+  var sp = n.querySelector('.val'), ph = n.querySelector('.ph');
+  if (sp) { sp.style.fontSize = (10.5 * k).toFixed(2) + 'px'; sp.style.lineHeight = '1.5'; }
+  if (ph) { ph.style.fontSize = (10 * k).toFixed(2) + 'px'; }
+  n.classList.toggle('on', !!S.texts[f.id]);
 }
 
 function bindUi() {
@@ -483,7 +576,7 @@ function afterSignApply() {
 
 /* ---------------- 서명 패드 ---------------- */
 function openSignPad(f) {
-  var title = f.p === 1 ? '개인정보 동의 서명' : (f.p === 2 || f.p === 3 ? '보안각서 서명' : '계약서 서명');
+  var title = isClose() ? '산모 확인 서명' : (f.p === 1 ? '개인정보 동의 서명' : (f.p === 2 || f.p === 3 ? '보안각서 서명' : '계약서 서명'));
   var signN = signFieldIds().length || 1;
   var sheet = el('<div class="sheet"><div class="panel">' +
     '<h3>' + title + '</h3>' +
@@ -627,7 +720,7 @@ function openSubmitSheet() {
     '<div class="kv"><span class="k">문서</span><span class="v">' + esc(CT.type || '관리사님 계약서식') + '</span></div>' +
     '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CO.branch || CT.branch) + '지사</span></div>' +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
-    '<div class="kv"><span class="k">계약기간</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
+    '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '<div class="kv"><span class="k">서명</span><span class="v">' + req.length + '개 항목 완료</span></div>' +
     '</div>' +
     '<div class="row2" style="margin-top:14px"><button class="btn gray" id="cancel">취소</button>' +
@@ -648,11 +741,11 @@ function hideLoading() { var l = $('#load'); if (l) l.remove(); }
 function doSubmit() {
   if (_submitting) return;
   _submitting = true;
-  showLoading('계약서를 저장하고 있어요', '3~5초면 끝납니다. 창을 닫지 말아 주세요');
+  showLoading('문서를 저장하고 있어요', '3~5초면 끝납니다. 창을 닫지 말아 주세요');
   buildFinalPdf().then(function (b64) {
     return api({
       action: 'submit', token: CT.token,
-      checks: S.checks, signs: S.signs,
+      checks: S.checks, signs: S.signs, opts: S.opts, texts: S.texts,
       consentAt: CONSENT_AT,
       pdf: b64, ua: navigator.userAgent
     });
@@ -674,7 +767,7 @@ function doSubmit() {
 function showDone(r) {
   app.innerHTML = '';
   app.appendChild(el('<div>' +
-    '<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
     '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:28px 16px">' +
@@ -684,7 +777,7 @@ function showDone(r) {
     '</div>' +
     summaryCard() +
     '<div class="card"><h2>안내</h2><p class="muted small" style="margin:0">' +
-    '서명하신 계약서는 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
+    '서명하신 ' + (isClose() ? '종료안내문' : '계약서') + '는 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
     '문의: 가온누리 산후도우미 담당자</p></div></div></div>'));
 }
 
@@ -764,6 +857,55 @@ function drawSignImage(page, img, f) {
   var dy = f.y + pad + (bh - dh) / 2;
   page.drawImage(img, { x: dx, y: PH - (dy + dh), width: dw, height: dh });
 }
+function drawGlyphCheck(page, f, rowY) {
+  var x = f.bx, y = rowY, w = f.bw, h = f.bh;
+  var lw = Math.max(1.1, w * 0.16);
+  var color = PDFLib.rgb(15 / 255, 95 / 255, 168 / 255);
+  var pts = [
+    { x: x + w * 0.14, y: y + h * 0.50 },
+    { x: x + w * 0.42, y: y + h * 0.80 },
+    { x: x + w * 0.88, y: y + h * 0.18 }
+  ];
+  for (var i = 0; i < 2; i++) {
+    page.drawLine({
+      start: { x: pts[i].x, y: PH - pts[i].y },
+      end: { x: pts[i + 1].x, y: PH - pts[i + 1].y },
+      thickness: lw, color: color, lineCap: PDFLib.LineCapStyle.Round
+    });
+  }
+}
+function wrapLines(ctx, text, maxW) {
+  var out = [];
+  String(text || '').split(/\n/).forEach(function (para) {
+    var line = '', chars = Array.from(para);
+    for (var i = 0; i < chars.length; i++) {
+      var t = line + chars[i];
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = chars[i]; }
+      else line = t;
+    }
+    out.push(line);
+  });
+  return out;
+}
+function areaOverlayCanvas(f, text) {
+  var k = OV;
+  var cv = document.createElement('canvas');
+  cv.width = Math.max(2, Math.round(f.w * k));
+  cv.height = Math.max(2, Math.round(f.h * k));
+  var ctx = cv.getContext('2d');
+  var size = 10.5 * k;
+  ctx.font = '500 ' + size.toFixed(1) + 'px ' + FONT;
+  ctx.fillStyle = '#111';
+  ctx.textBaseline = 'top';
+  var maxW = f.w * k * 0.93;
+  var lines = wrapLines(ctx, text, maxW);
+  var lh = size * 1.55;
+  for (var i = 0; i < lines.length; i++) {
+    if (f.h * k * 0.03 + i * lh > cv.height - size) break;
+    ctx.fillText(lines[i], f.w * k * 0.035, f.h * k * 0.03 + i * lh, maxW);
+  }
+  return cv;
+}
 function buildFinalPdf() {
   return prepareOut().then(function (out) {
     var uniq = [];
@@ -771,13 +913,21 @@ function buildFinalPdf() {
       var v = S.signs[id];
       if (v && uniq.indexOf(v) < 0) uniq.push(v);   // 같은 서명은 한 번만 심는다
     });
-    return Promise.all(uniq.map(function (src) { return out.embedPng(src); })).then(function (embs) {
-      var embOf = {};
+    var areas = FIELDS.filter(function (f) { return f.t === 'area' && S.texts[f.id]; });
+    var areaCv = {};
+    areas.forEach(function (f) { areaCv[f.id] = areaOverlayCanvas(f, S.texts[f.id]); });
+    var jobs = uniq.map(function (src) { return out.embedPng(src); })
+      .concat(areas.map(function (f) { return out.embedPng(areaCv[f.id].toDataURL('image/png')); }));
+    return Promise.all(jobs).then(function (embs) {
+      var embOf = {}, embArea = {};
       uniq.forEach(function (src, i) { embOf[src] = embs[i]; });
+      areas.forEach(function (f, i) { embArea[f.id] = embs[uniq.length + i]; });
       out.getPages().forEach(function (page, i) {
         FIELDS.filter(function (f) { return f.p === PAGES[i]; }).forEach(function (f) {
           if (f.t === 'check') { if (S.checks[f.id]) drawCheckVector(page, f); }
           else if (f.t === 'sign') { if (embOf[S.signs[f.id]]) drawSignImage(page, embOf[S.signs[f.id]], f); }
+          else if (f.t === 'radio') { if (S.opts[f.id] != null) drawGlyphCheck(page, f, f.rows[S.opts[f.id]]); }
+          else if (f.t === 'area') { if (embArea[f.id]) page.drawImage(embArea[f.id], { x: f.x, y: PH - f.y - f.h, width: f.w, height: f.h }); }
         });
       });
       return out.saveAsBase64();
@@ -790,6 +940,7 @@ function buildFinalPdf() {
 
 /* ---------------- 관리자 ---------------- */
 var SID = sessionStorage.getItem(SIDKEY) || '';
+function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
 function showAdmin() {
   if (SID) { api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); else { SID = ''; sessionStorage.removeItem(SIDKEY); showPin(); } }); }
   else showPin();
@@ -859,7 +1010,8 @@ function renderDash(list) {
   html += '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden">';
   list.forEach(function (c) {
     html += '<div class="list-item" data-token="' + esc(c.token) + '">' +
-      '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') + ' <span class="chip br">' + esc(c.branch) + '</span></div>' +
+      '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') + ' <span class="chip br">' + esc(c.branch) + '</span>' +
+      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>' : '') + '</div>' +
       '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
       '<div class="r"><span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span>' +
       '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>';
@@ -874,43 +1026,142 @@ function renderCreate() {
   var b = $('#adminbody');
   var d = new Date(), t = todayParts();
   var y1 = t.y + 1;
+  var today = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   b.innerHTML = '<div class="wrap"><div class="card">' +
-    '<h2>새 계약 링크 만들기</h2>' +
-    '<div class="formrow"><label>지사</label><select id="c_branch"><option>계룡</option><option>논산</option></select></div>' +
-    '<div class="g2"><div class="formrow"><label>관리사 성명</label><input id="c_name" placeholder="예: 홍길동"></div>' +
-    '<div class="formrow"><label>주민등록번호</label><input id="c_jumin" placeholder="000000-0000000" inputmode="numeric"></div></div>' +
-    '<div class="g2"><div class="formrow"><label>연락처</label><input id="c_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
-    '<div class="formrow"><label>계약기간 시작</label><input id="c_start" placeholder="2026-11-20" value="' + d.toISOString().slice(0, 10) + '"></div></div>' +
-    '<div class="g2"><div class="formrow"><label>계약기간 종료</label><input id="c_end" placeholder="' + y1 + '-11-19"></div>' +
-    '<div class="formrow"><label>메모(선택)</label><input id="c_memo" placeholder=""></div></div>' +
-    '<div class="formrow"><label>관리사 주소</label><input id="c_addr" placeholder="예: 대전광역시 유성구 대학로 99, 101동 1001호"></div>' +
+    '<h2>새 문서 링크 만들기</h2>' +
+    '<div class="formrow"><label>양식</label><select id="c_type">' +
+      '<option value="관리사님 계약서식">관리사님 계약서식</option>' +
+      '<option value="서비스 종료안내문">서비스 종료안내문 (모니터링)</option>' +
+    '</select></div>' +
+    '<div id="form_contract">' +
+      '<div class="formrow"><label>지사</label><select id="c_branch"><option>계룡</option><option>논산</option></select></div>' +
+      '<div class="g2"><div class="formrow"><label>관리사 성명</label><input id="c_name" placeholder="예: 홍길동"></div>' +
+      '<div class="formrow"><label>주민등록번호</label><input id="c_jumin" placeholder="000000-0000000" inputmode="numeric"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>연락처</label><input id="c_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
+      '<div class="formrow"><label>계약기간 시작</label><input id="c_start" placeholder="2026-11-20" value="' + today + '"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>계약기간 종료</label><input id="c_end" placeholder="' + y1 + '-11-19"></div>' +
+      '<div class="formrow"><label>메모(선택)</label><input id="c_memo" placeholder=""></div></div>' +
+      '<div class="formrow"><label>관리사 주소</label><input id="c_addr" placeholder="예: 대전광역시 유성구 대학로 99, 101동 1001호"></div>' +
+    '</div>' +
+    '<div id="form_close" class="hidden">' +
+      '<div class="g2"><div class="formrow"><label>지사</label><select id="x_branch"><option>계룡</option><option>논산</option></select></div>' +
+      '<div class="formrow"><label>이용자(산모) 성명</label><input id="x_name" placeholder="예: 윤슬기"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>연락처</label><input id="x_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
+      '<div class="formrow"><label>제공인력(관리사)</label><input id="x_worker" placeholder="예: 김용미"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" type="date"></div>' +
+      '<div class="formrow"><label>서비스 종료일</label><input id="x_end" type="date"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>이용유형(바우처)</label><input id="x_voucher" placeholder="예: A통합1"></div>' +
+      '<div class="formrow"><label>서비스기간(일수)</label><input id="x_term" placeholder="예: 20일"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>기존 제공기간</label><input id="x_beforePeriod" placeholder="시작일·종료일 입력 시 자동"></div>' +
+      '<div class="formrow"><label>변경 제공기간</label><input id="x_afterPeriod" placeholder="시작일·종료일 입력 시 자동"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>기존 제공인력</label><input id="x_beforeWorker" placeholder="자동"></div>' +
+      '<div class="formrow"><label>변경 제공인력</label><input id="x_afterWorker" placeholder="자동">' +
+      '<label class="mini"><input type="checkbox" id="x_same"> 변동없음</label></div></div>' +
+      '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" type="date"></div>' +
+      '<div class="formrow"><label>메모(선택)</label><input id="x_memo" placeholder=""></div></div>' +
+    '</div>' +
     '<div style="margin-top:16px"><button class="btn" id="c_ok">링크 만들기</button></div>' +
     '<div id="c_result" style="margin-top:12px"></div>' +
     '</div><button class="btn ghost" id="c_back">목록으로</button></div>';
   b.querySelector('#c_back').addEventListener('click', function () { refreshList(); });
+
+  /* 양식 전환 */
+  var sel = b.querySelector('#c_type');
+  sel.addEventListener('change', function () {
+    var close = sel.value === '서비스 종료안내문';
+    b.querySelector('#form_contract').classList.toggle('hidden', close);
+    b.querySelector('#form_close').classList.toggle('hidden', !close);
+  });
+
+  /* 종료안내문 입력 자동 채우기 (직접 고친 칸은 그대로 둠) */
+  function cv(id) { var e = $('#' + id); return e ? e.value.trim() : ''; }
+  function syncClose() {
+    var st = cv('x_start'), en = cv('x_end');
+    var term = cv('x_term').replace(/[^0-9]/g, '');
+    var w = cv('x_worker');
+    var period = (st && en) ? (st + ' ~ ' + en + (term ? ' (' + term + '\uC77C)' : '')) : '';
+    var bp = $('#x_beforePeriod'), ap = $('#x_afterPeriod');
+    if (bp && !bp.dataset.touched) bp.value = period;
+    if (ap && !ap.dataset.touched) ap.value = period;
+    var bw = $('#x_beforeWorker'), aw = $('#x_afterWorker');
+    var same = $('#x_same') && $('#x_same').checked;
+    if (bw && !bw.dataset.touched) bw.value = w;
+    if (aw && !aw.dataset.touched) aw.value = same ? '변동없음' : w;
+    var apd = $('#x_apply');
+    if (apd && !apd.dataset.touched) apd.value = st;
+  }
+  ['x_start', 'x_end', 'x_term', 'x_worker'].forEach(function (id) {
+    var e = $('#' + id); if (e) e.addEventListener('input', syncClose);
+  });
+  ['x_beforePeriod', 'x_afterPeriod', 'x_beforeWorker', 'x_afterWorker', 'x_apply'].forEach(function (id) {
+    var e = $('#' + id); if (e) e.addEventListener('input', function () { e.dataset.touched = '1'; });
+  });
+  var sameBox = $('#x_same');
+  if (sameBox) sameBox.addEventListener('change', function () {
+    var aw = $('#x_afterWorker');
+    if (!aw) return;
+    if (sameBox.checked) { aw.value = '변동없음'; delete aw.dataset.touched; }
+    else { aw.dataset.touched = '1'; aw.value = cv('x_worker'); }
+  });
+
   b.querySelector('#c_ok').addEventListener('click', function () {
-    var p = {
-      action: 'create', sid: SID,
-      branch: $('#c_branch').value,
-      name: $('#c_name').value.trim(),
-      jumin: $('#c_jumin').value.trim(),
-      phone: $('#c_phone').value.trim(),
-      address: $('#c_addr').value.trim(),
-      start: $('#c_start').value.trim(),
-      end: $('#c_end').value.trim(),
-      memo: $('#c_memo').value.trim()
-    };
-    if (!p.name) { toast('성명을 입력해 주세요'); return; }
-    if (!/^\d{6}-?\d{7}$/.test(p.jumin)) { toast('주민등록번호 형식을 확인해 주세요'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('계약기간을 YYYY-MM-DD로 입력해 주세요'); return; }
+    var type = sel.value;
+    var close = type === '서비스 종료안내문';
+    var p, item;
+    if (close) {
+      var st = cv('x_start'), en = cv('x_end'), ap = cv('x_apply') || st;
+      var jm = function (ds) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ds || '');
+        return m ? { y: m[1], m: m[2], d: m[3] } : { y: '', m: '', d: '' };
+      };
+      var pe = jm(en), pa = jm(ap);
+      p = {
+        action: 'create', sid: SID, type: type,
+        branch: cv('x_branch'),
+        name: cv('x_name'),
+        phone: cv('x_phone'),
+        start: st, end: en,
+        memo: cv('x_memo'),
+        prefill: {
+          user: cv('x_name'), phone: cv('x_phone'), worker: cv('x_worker'),
+          voucher: cv('x_voucher'), term: cv('x_term'),
+          endY: pe.y, endM: pe.m, endD: pe.d,
+          applyY: pa.y, applyM: pa.m, applyD: pa.d,
+          startDate: st, endDate: en,
+          beforePeriod: cv('x_beforePeriod'), beforeWorker: cv('x_beforeWorker'),
+          afterPeriod: cv('x_afterPeriod'), afterWorker: cv('x_afterWorker')
+        }
+      };
+      if (!p.name) { toast('이용자(산모) 성명을 입력해 주세요'); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('서비스 종료일을 선택해 주세요'); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ap)) { toast('변경 적용일을 선택해 주세요'); return; }
+      item = { token: '', type: type, branch: p.branch, name: p.name, start: p.start, end: p.end };
+    } else {
+      p = {
+        action: 'create', sid: SID, type: type,
+        branch: cv('c_branch'),
+        name: cv('c_name'),
+        jumin: cv('c_jumin'),
+        phone: cv('c_phone'),
+        address: cv('c_addr'),
+        start: cv('c_start'),
+        end: cv('c_end'),
+        memo: cv('c_memo')
+      };
+      if (!p.name) { toast('성명을 입력해 주세요'); return; }
+      if (!/^\d{6}-?\d{7}$/.test(p.jumin)) { toast('주민등록번호 형식을 확인해 주세요'); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('계약기간을 YYYY-MM-DD로 입력해 주세요'); return; }
+      item = { token: '', type: type, branch: p.branch, name: p.name, start: p.start, end: p.end };
+    }
     this.disabled = true;
     api(p).then(function (r) {
       var btn = $('#c_ok'); if (btn) btn.disabled = false;
       if (!r.ok) { toast('실패: ' + (r.error || '오류')); return; }
       var link = location.origin + location.pathname + '?t=' + r.token;
-      var item = { token: r.token, type: '관리사님 계약서식', branch: p.branch, name: p.name, start: p.start, end: p.end };
+      item.token = r.token;
       var box = $('#c_result');
-      box.innerHTML = '<div class="muted small" style="margin-bottom:6px">계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.</div>' +
+      box.innerHTML = '<div class="muted small" style="margin-bottom:6px">' +
+        (close ? '종료안내문 링크가 만들어졌습니다. 산모님께 링크를 보내 주세요.' : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.') + '</div>' +
         '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
         '<div class="copybtns"><button class="btn gray" id="c_copy">링크 복사</button>' +
         '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
@@ -947,8 +1198,9 @@ function copyText(text) {
 function guideTextOf(c) {
   var branch = c.branch || '계룡';
   var link = location.origin + location.pathname + '?t=' + c.token;
+  var title = isCloseType(c) ? (c.type || '서비스 종료안내문') : (c.type || '관리사님 계약서식') + ' (' + branch + '지사)';
   return '[전자계약] 서명 요청이 왔습니다.\n\n' +
-    '▶ 문서 제목\n' + (c.type || '관리사님 계약서식') + ' (' + branch + '지사)\n\n' +
+    '▶ 문서 제목\n' + title + '\n\n' +
     '▶ 보낸 사람\n가온누리산후도우미\n\n' +
     '▶ 대상자\n' + (c.name || '') + ' 님 (' + (c.start || '') + ' ~ ' + (c.end || '') + ')\n\n' +
     '▶ 문서 서명하기\n' + link + '\n\n' +
@@ -965,11 +1217,15 @@ function openDetail(token) {
     var c = r.item;
     var sheet = el('<div class="sheet"><div class="panel" style="max-height:92vh;overflow:auto">' +
       '<h3>' + esc(c.name) + ' · ' + esc(c.branch) + '지사</h3>' +
-      '<div class="muted small">' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span></div>' +
+      '<div class="muted small">' + esc(c.type || '') + ' · ' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span></div>' +
       '<div class="card" style="margin:14px 0 0;padding:12px">' +
-      '<div class="kv"><span class="k">주민번호</span><span class="v">' + esc(c.jumin || '-') + '</span></div>' +
+      (isCloseType(c)
+        ? '<div class="kv"><span class="k">이용유형</span><span class="v">' + esc((c.prefill || {}).voucher || '-') + ((c.prefill || {}).term ? ' · ' + esc(c.prefill.term) : '') + '</span></div>' +
+          '<div class="kv"><span class="k">제공인력</span><span class="v">' + esc((c.prefill || {}).worker || '-') + '</span></div>' +
+          '<div class="kv"><span class="k">변경내역</span><span class="v">' + esc((c.prefill || {}).afterPeriod || '-') + ' / ' + esc((c.prefill || {}).afterWorker || '-') + '</span></div>'
+        : '<div class="kv"><span class="k">주민번호</span><span class="v">' + esc(c.jumin || '-') + '</span></div>' +
+          '<div class="kv"><span class="k">주소</span><span class="v">' + esc(c.address || '-') + '</span></div>') +
       '<div class="kv"><span class="k">연락처</span><span class="v">' + esc(c.phone || '-') + '</span></div>' +
-      '<div class="kv"><span class="k">주소</span><span class="v">' + esc(c.address || '-') + '</span></div>' +
       '<div class="kv"><span class="k">생성</span><span class="v">' + esc(c.created || '-') + '</span></div>' +
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
