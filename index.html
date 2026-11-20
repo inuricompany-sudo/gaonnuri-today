@@ -246,12 +246,14 @@
       var ctl = null, tid = null;
       try { ctl = new AbortController(); opt.signal = ctl.signal; } catch (e) {}
       if (ctl) tid = setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 30000);
+      var t0 = nowMs_();
       return fetch(GAS_URL, opt).then(function (res) {
         if (tid) clearTimeout(tid);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.text();
       }).then(function (txt) {
-        try { return JSON.parse(txt); } catch (e) { throw new Error('서버 응답을 읽지 못했습니다.'); }
+        try { var out = JSON.parse(txt); PERF.apiMs = Math.round(nowMs_() - t0); return out; }
+        catch (e) { throw new Error('서버 응답을 읽지 못했습니다.'); }
       });
     }
 
@@ -272,6 +274,13 @@
     var DEFAULT_MSG = '안녕하세요 관리사님, 오늘 바우처 카드 체크 확인 부탁드립니다.';
     var MSG_KEY = 'gn_card_msg';
     var PIN_KEY = 'gn_pin_v1';
+    /* v19: 이 기기에서만 쓰는 '직전 화면' 캐시 (공개 파일에는 데이터 없음) */
+    var CACHE_KEY = 'gn_state_v1';
+    /* v19: 체감 확인용 계측값 (화면에는 표시하지 않음) */
+    var PERF = { cachePaint: -1, netPaint: -1, apiMs: -1 };
+    try { window.__perf = PERF; } catch (e) {}
+    function nowMs_() { try { return (window.performance && performance.now) ? performance.now() : Date.now(); } catch (e) { return Date.now(); } }
+    var BOOT_T0 = nowMs_();
 
     /* ── 잠금 상태 ── */
     var PIN = '';        // 잠금이 풀린 뒤에만 값이 들어갑니다. (메모리에만 보관)
@@ -312,6 +321,40 @@
       var l = store_('loc'), s = store_('sess');
       try { if (l) l.removeItem(PIN_KEY); } catch (e) {}
       try { if (s) s.removeItem(PIN_KEY); } catch (e) {}
+    }
+
+    /* v19: 마지막으로 받은 화면 상태를 이 기기에만 저장합니다.
+       '이 기기에서 기억하기'면 localStorage, 아니면 sessionStorage.
+       잠그기·PIN 실패 때는 지워서 다음에 PIN을 다시 받습니다. */
+    function saveCache(data) {
+      try {
+        if (!data || !data.items) return;
+        var payload = JSON.stringify({ t: Date.now(), data: data });
+        var l = store_('loc'), s = store_('sess');
+        var remember = false;
+        try { remember = !!(l && l.getItem(PIN_KEY)); } catch (e0) {}
+        if (!remember && !!PIN) { var rem = document.getElementById('remember'); remember = rem ? !!rem.checked : false; }
+        if (remember) {
+          if (l) l.setItem(CACHE_KEY, payload);
+          if (s) s.removeItem(CACHE_KEY);
+        } else {
+          if (s) s.setItem(CACHE_KEY, payload);
+          if (l) l.removeItem(CACHE_KEY);
+        }
+      } catch (e) {}
+    }
+    function readCache() {
+      try {
+        var l = store_('loc'), s = store_('sess');
+        var raw = (l && l.getItem(CACHE_KEY)) || (s && s.getItem(CACHE_KEY));
+        if (!raw) return null;
+        var o = JSON.parse(raw);
+        return (o && o.data && o.data.items) ? o.data : null;
+      } catch (e) { return null; }
+    }
+    function clearCache() {
+      try { var l = store_('loc'); if (l) l.removeItem(CACHE_KEY); } catch (e) {}
+      try { var s = store_('sess'); if (s) s.removeItem(CACHE_KEY); } catch (e) {}
     }
 
     function esc(s) {
@@ -381,8 +424,11 @@
           hideLock();
           lockMsg('');
           render(r);
+          PERF.netPaint = Math.round(nowMs_() - BOOT_T0);
+          loadStats(false);          // v19: 일수·날짜 내역은 뒤에서
         } else {
           clearStoredPin();
+          clearCache();              // v19: 실패하면 캐시도 지웁니다.
           pinBuf = '';
           paintDots();
           lockMsg((r && r.message) || '비밀번호가 맞지 않습니다.', true);
@@ -403,6 +449,7 @@
     function lockNow(msg) {
       MODAL = null;
       clearStoredPin();
+      clearCache();               // v19: 잠그면 이 기기의 화면 캐시도 비웁니다.
       showLock(msg || '잠갔습니다. 비밀번호를 입력하세요.');
     }
 
@@ -527,6 +574,8 @@
     }
 
     function render(data) {
+      // v19: 가벼운 load 응답에는 일수 집계가 없습니다. 직전에 받아 둔 집계는 유지합니다.
+      if ((!data.motherStats || !Object.keys(data.motherStats).length) && DATA.motherStats) data.motherStats = DATA.motherStats;
       DATA = data;
       LAST_LOAD = Date.now();
       document.getElementById('dateLabel').textContent = data.dateLabel || '';
@@ -559,7 +608,34 @@
       html += tomorrowSection(data);   // v18: 내일 시작 (있을 때만)
       list.innerHTML = html;
       updateCount();
+      saveCache(DATA);            // v19: 다음에 열 때 0.1초 만에 그릴 수 있게 이 기기에만 저장
       if (!data.hasTodayColumn) toast(data.sheetName + '에 오늘 날짜 열이 없습니다.');
+    }
+
+    /* ── v19: 산모별 카드체크 일수·날짜별 내역은 화면이 뜬 뒤 따로 ──────
+       첫 load 응답에는 일수 집계가 없습니다. 목록이 뜨면 이 함수가 조용히 한 번 더
+       받아 DATA.motherStats 를 채우고, 열려 있는 모달도 그 자리에서 갱신합니다.
+       · 2분 안에 이미 받았으면 건너뜀 (30초 자동 동기화에서 매번 부르지 않음)
+       · 산모 이름을 눌렀는데 아직 없으면 force=true 로 즉시 요청 */
+    var STATS_BUSY = false, STATS_AT = 0, STATS_GAP = 120000;
+    function loadStats(force) {
+      if (!PIN || STATS_BUSY) return;
+      if (!force && STATS_AT && Date.now() - STATS_AT < STATS_GAP) return;
+      var names = [], i, rows = DATA.items || [];
+      for (i = 0; i < rows.length; i++) if (rows[i].mother && names.indexOf(rows[i].mother) < 0) names.push(rows[i].mother);
+      var ts = DATA.tomorrowStarts || [];
+      for (i = 0; i < ts.length; i++) if (ts[i].mother && names.indexOf(ts[i].mother) < 0) names.push(ts[i].mother);
+      if (!names.length) return;
+      STATS_BUSY = true;
+      callApi({ action: 'motherStats', pin: PIN, mothers: names }).then(function (r) {
+        STATS_BUSY = false;
+        if (!r || r.ok === false) return;
+        DATA.motherStats = r.motherStats || {};
+        if (r.motherAssign) DATA.motherAssign = r.motherAssign;
+        STATS_AT = Date.now();
+        saveCache(DATA);
+        refreshModal();
+      }, function () { STATS_BUSY = false; });
     }
 
     function load() {
@@ -568,6 +644,7 @@
       callApi({ action: 'load', pin: PIN }).then(function (r) {
         if (!r || r.ok === false) { lockNow((r && r.message) || '다시 잠갔습니다.'); return; }
         render(r);
+        loadStats(false);
         refreshModal();
       }, function (e) {
         document.getElementById('list').innerHTML = '<div class="empty">불러오지 못했습니다.<br>' + esc(e.message || e) + '</div>';
@@ -596,6 +673,7 @@
           return;
         }
         render(r);
+        loadStats(false);
         refreshModal();
       }, function () { SYNCING = false; });
     }
@@ -720,6 +798,8 @@
       var idx = Number(cb.dataset.idx);
       var it = DATA.items[idx];
       if (!it) return;
+      // v19: 기억된 화면을 먼저 그린 상태(PIN 확인 전)에는 시트를 건드리지 않습니다.
+      if (!PIN) { cb.checked = !!it.checked; toast('비밀번호를 확인하는 중이에요. 잠시만 기다려 주세요.'); return; }
       // v16: '일반' 신청 산모는 카드체크 대상이 아니므로 시트에 쓰지 않고 완료 상태를 유지합니다.
       if (it.isNormal) {
         cb.checked = true;
@@ -857,6 +937,21 @@
       if (!it) return;
       MODAL = { kind: 'mother', key: it.mother };
       var st = (DATA.motherStats || {})[it.mother] || null;
+      // v19: 일수 집계가 아직 안 왔으면 잠깐 로딩을 보여 주고 바로 채웁니다.
+      if (!st && !it.isNormal) {
+        document.getElementById('sheetbox').innerHTML =
+          '<h2>' + esc(it.mother) + '</h2>' +
+          '<div class="meta">' + esc(it.caregiver) + ' 관리사 담당</div>' +
+          '<div class="mnone" id="statWait">카드체크 일수를 불러오는 중…</div>' +
+          '<div class="actions"><button class="btn" id="closeModal">닫기</button></div>';
+        document.getElementById('modal').classList.add('open');
+        loadStats(true);
+        setTimeout(function () {
+          var w = document.getElementById('statWait');
+          if (w && MODAL && MODAL.kind === 'mother' && MODAL.key === it.mother) w.textContent = '일수를 불러오지 못했어요. 잠시 후 다시 눌러 주세요.';
+        }, 8000);
+        return;
+      }
       var as = (DATA.motherAssign || {})[it.mother] || null;
       var days = (st && st.days) ? st.days : [];
       var total = st ? (st.totalDays || 0) : 0;
@@ -1080,7 +1175,8 @@
           d.id = 'diag';
           d.style.cssText = 'font-size:11px;color:#D93025;padding:6px 12px;background:#fff';
           d.textContent = 'DIAG rows=' + rows.length + ' rowOverflow=' + maxOver + ' bodyOverflow=' + bodyOver +
-            ' lock=' + (document.getElementById('lock').classList.contains('hide') ? 'off' : 'on');
+            ' lock=' + (document.getElementById('lock').classList.contains('hide') ? 'off' : 'on') +
+            ' cachePaint=' + PERF.cachePaint + ' netPaint=' + PERF.netPaint + ' apiMs=' + PERF.apiMs;
           document.body.insertBefore(d, document.body.firstChild);
         }, 150);
       }, 150);
@@ -1091,8 +1187,16 @@
       paintDots();
       var saved = readStoredPin();
       if (saved) {
-        lockMsg('확인 중…');
-        unlock(saved, true);
+        // v19: 이 기기에 직전 화면이 있으면 잠금 화면 없이 바로 그립니다. (0.1초 목표)
+        var cached = readCache();
+        if (cached) {
+          hideLock();
+          render(cached);
+          PERF.cachePaint = Math.round(nowMs_() - BOOT_T0);
+        } else {
+          lockMsg('확인 중…');
+        }
+        unlock(saved, true);   // 뒤에서 서버 검증 + 최신 데이터로 조용히 교체
       } else {
         showLock('');
       }
