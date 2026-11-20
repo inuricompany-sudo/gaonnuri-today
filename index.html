@@ -14,6 +14,11 @@
     h1{margin:0 0 6px;font-size:17px;letter-spacing:-.02em;color:#1f3d18}
     .sub{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#5f6368}
     .count{margin-left:auto;font-weight:700;color:#2e6b2e;font-size:12.5px}
+    /* v20: 현재 권한 배지 (헤더) */
+    .rolebadge{flex:0 0 auto;font-size:10px;font-weight:700;border-radius:6px;padding:1px 6px;line-height:1.55;
+      white-space:nowrap;border:1px solid transparent}
+    .rolebadge.viewer{color:#8a5300;background:#fdf3e0;border-color:#f0dfbc}
+    .rolebadge.admin{color:#1f6b21;background:#e8f3e6;border-color:#d3e6cf}
     .icobtn{flex:0 0 auto;border:1px solid #dde1dc;background:#fff;border-radius:9px;width:30px;height:30px;
       display:flex;align-items:center;justify-content:center;font-size:14px;color:#5f6368;padding:0}
     main{padding:0 0 10px}
@@ -51,6 +56,9 @@
       border:1.5px solid #c8cec7;background:#fff;color:transparent;font-size:13px;font-weight:700}
     .chk input:checked + .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
     .chk input:disabled + .mark{opacity:.55}
+    /* v20: 보기 전용 — 체크된 ☑/☐ 모양은 그대로 보이고, 누르면 안내만 뜹니다. */
+    .chk.ro{cursor:default}
+    .chk.ro input:disabled + .mark{opacity:1}
     /* v16: '일반' 신청 산모 — 처음부터 완료(☑) 상태로 고정 */
     .chk.fixed{cursor:default}
     .chk.fixed .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
@@ -216,6 +224,7 @@
       <h1>가온누리 오늘 현황</h1>
       <div class="sub">
         <span id="dateLabel">…</span>
+        <span class="rolebadge viewer" id="roleBadge" title="보기 전용 — 조회만 할 수 있어요">보기전용</span>
         <span class="count" id="count">카드체크 0/0</span>
         <button class="icobtn" id="lockBtn" title="잠그기">🔒</button>
         <button class="icobtn" id="reload" title="새로고침">↻</button>
@@ -369,6 +378,24 @@
       clearTimeout(t._h);
       t._h = setTimeout(function () { t.style.display = 'none'; }, 2600);
     }
+    /* ── v20: 권한 (보기 전용 / 관리자) ──────────────────────────────
+       서버가 load 응답의 role('admin' | 'viewer')로 알려 줍니다.
+       · 값이 없거나 모르는 값(구버전 캐시 포함)이면 '보기 전용'으로 봅니다. (안전한 쪽)
+       · 화면은 체크박스를 잠그고 소급 추가·삭제 버튼을 숨깁니다.
+         실제 차단은 서버가 관리자 PIN 인지 다시 확인해 처리합니다. */
+    var ROLE = 'viewer';
+    function isAdmin_() { return ROLE === 'admin'; }
+    function setRole_(role) {
+      ROLE = (role === 'admin') ? 'admin' : 'viewer';
+      var b = document.getElementById('roleBadge');
+      if (!b) return;
+      b.textContent = ROLE === 'admin' ? '관리자' : '보기전용';
+      b.className = 'rolebadge ' + ROLE;
+      b.title = ROLE === 'admin' ? '관리자 권한 — 카드체크·소급 기록을 바꿀 수 있어요'
+        : '보기 전용 — 조회만 할 수 있어요';
+    }
+    var VIEWER_MSG = '보기 전용이에요. 관리자 비밀번호로 로그인해 주세요.';
+
     function updateCount() {
       var on = document.querySelectorAll('.chk input:checked').length;
       var all = document.querySelectorAll('.chk input').length;
@@ -485,6 +512,17 @@
     });
 
     /* ── 화면 그리기 ── */
+    /* v20: 체크박스 한 칸 — 보기 전용이면 같은 ☑/☐ 모양 그대로, 누를 수만 없게(disabled). */
+    function chkHtml(it, idx) {
+      var fixed = !!it.isNormal;
+      var ro = !isAdmin_();
+      var title = ro ? ' title="보기 전용 — 관리자만 바꿀 수 있어요"'
+        : (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '');
+      return '<label class="chk' + (fixed ? ' fixed' : '') + (ro ? ' ro' : '') + '"' + title + '>' +
+        '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + (ro ? ' disabled' : '') + '>' +
+        '<span class="mark">✓</span>' +
+      '</label>';
+    }
     function rowHtml(it, idx) {
       var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
@@ -501,10 +539,7 @@
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
         '</div>' +
         '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
-        '<label class="chk' + (fixed ? ' fixed' : '') + '"' + (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '') + '>' +
-          '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
-          '<span class="mark">✓</span>' +
-        '</label>' +
+        chkHtml(it, idx) +
       '</div>';
     }
 
@@ -521,10 +556,7 @@
         lines += '<div class="tline">' +
           '<button class="' + careClass + '" data-idx="' + idx + '">' + esc(it.caregiver) + badge + '</button>' +
           '<button class="' + smsClass + '" data-sms="' + idx + '"' + smsDis + '>📩</button>' +
-          '<label class="chk' + (fixed ? ' fixed' : '') + '"' + (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '') + '>' +
-            '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + '>' +
-            '<span class="mark">✓</span>' +
-          '</label>' +
+          chkHtml(it, idx) +
         '</div>';
       }
       var gfixed = !!group[0].isNormal;
@@ -574,6 +606,8 @@
     }
 
     function render(data) {
+      // v20: 서버가 알려 준 권한으로 화면 모드를 먼저 정합니다. (모르는 값·구버전 캐시 = 보기 전용)
+      setRole_(data && data.role);
       // v19: 가벼운 load 응답에는 일수 집계가 없습니다. 직전에 받아 둔 집계는 유지합니다.
       if ((!data.motherStats || !Object.keys(data.motherStats).length) && DATA.motherStats) data.motherStats = DATA.motherStats;
       DATA = data;
@@ -798,6 +832,12 @@
       var idx = Number(cb.dataset.idx);
       var it = DATA.items[idx];
       if (!it) return;
+      // v20: 보기 전용은 시트를 바꿀 수 없습니다. (서버도 관리자 PIN 인지 다시 확인해 거부)
+      if (!isAdmin_()) {
+        cb.checked = !!it.checked;
+        toast(VIEWER_MSG);
+        return;
+      }
       // v19: 기억된 화면을 먼저 그린 상태(PIN 확인 전)에는 시트를 건드리지 않습니다.
       if (!PIN) { cb.checked = !!it.checked; toast('비밀번호를 확인하는 중이에요. 잠시만 기다려 주세요.'); return; }
       // v16: '일반' 신청 산모는 카드체크 대상이 아니므로 시트에 쓰지 않고 완료 상태를 유지합니다.
@@ -896,6 +936,9 @@
     }
 
     document.addEventListener('click', function (ev) {
+      // v20: 보기 전용에서는 체크박스를 눌러도 상태가 바뀌지 않고 안내만 합니다.
+      var rochk = ev.target.closest ? ev.target.closest('.chk.ro') : null;
+      if (rochk && !isAdmin_()) { ev.preventDefault(); toast(VIEWER_MSG); return; }
       var sms = ev.target.closest ? ev.target.closest('.sms') : null;
       if (sms) { sendSms(Number(sms.dataset.sms)); return; }
       var mom = ev.target.closest ? ev.target.closest('.mother[data-mom]') : null;
@@ -992,7 +1035,7 @@
           var cn = cares[ci].trim();
           if (!cn) continue;
           chips += '<span class="chip"><span class="cn">' + esc(cn) + '</span>' +
-            (isToday ? '' : (function (k, d0, h0) {
+            ((isToday || !isAdmin_()) ? '' : (function (k, d0, h0) {
               var armed = delArmed_(k);
               return '<button class="x' + (armed ? ' arm' : '') + '" data-del="1" data-armed="' + (armed ? '1' : '0') + '"' +
                 ' data-date="' + esc(d0) + '" data-helper="' + esc(h0) + '" title="이 기록 지우기">' + (armed ? '삭제?' : '✕') + '</button>';
@@ -1074,6 +1117,7 @@
     }
     function retroHtml(it, st) {
       if (it.isNormal) return '';
+      if (!isAdmin_()) return '';   // v20: 보기 전용은 '지난 날짜 소급 추가' 영역 자체를 숨깁니다.
       if (RETRO.mother !== it.mother) { RETRO = { mother: it.mother, date: '', helper: '' }; }
       var helpers = helperListFor(it), opts = '', i;
       for (i = 0; i < helpers.length; i++) {
@@ -1099,6 +1143,7 @@
     function retroCall(date, helper, checked) {
       var mother = (MODAL && MODAL.kind === 'mother') ? MODAL.key : '';
       if (!mother) return;
+      if (!isAdmin_()) { toast(VIEWER_MSG); return; }   // v20: 보기 전용 방어
       if (!date || !helper) { toast('날짜와 관리사를 골라 주세요'); return; }
       setRetroBusy(true, checked ? '추가 중…' : '삭제 중…');
       PENDING++;
