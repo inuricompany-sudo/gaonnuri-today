@@ -734,11 +734,11 @@ function openDetail(token) {
       btn.disabled = true; btn.textContent = '불러오는 중…';
       api({ action: 'pdf', sid: SID, token: token }).then(function (rr) {
         btn.disabled = false; btn.textContent = '최종 PDF 보기';
-        if (!rr.ok || !rr.pdf) { toast('PDF를 불러오지 못했습니다'); return; }
+        if (!rr.ok || !rr.pdf) { toast('PDF 오류: ' + ((rr && (rr.error || rr.message)) || 'unknown')); return; }
         var view = sheet.querySelector('#d_view');
         view.innerHTML = '<div class="docpreview" id="dpv"></div>';
         renderPdfInto(dataUrlToBytes('data:application/pdf;base64,' + rr.pdf), view.querySelector('#dpv'));
-      }).catch(function () { btn.disabled = false; btn.textContent = '최종 PDF 보기'; toast('네트워크 오류'); });
+      }).catch(function (e) { btn.disabled = false; btn.textContent = '최종 PDF 보기'; toast('PDF 오류: ' + ((e && (e.message || e)) || 'network')); });
     });
   });
 }
