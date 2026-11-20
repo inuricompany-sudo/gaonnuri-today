@@ -564,7 +564,13 @@ function showPin() {
     busy = true; msg('확인 중…');
     api({ action: 'login', pin: buf }).then(function (r) {
       busy = false;
-      if (r.ok) { SID = r.sid; sessionStorage.setItem(SIDKEY, SID); return api({ action: 'list', sid: SID }); }
+      if (r.ok) {
+        SID = r.sid; sessionStorage.setItem(SIDKEY, SID);
+        return api({ action: 'list', sid: SID }).then(function (l) {
+          if (l && l.ok) return renderDash(l.list);
+          msg('목록을 불러오지 못했습니다'); busy = false;
+        });
+      }
       buf = ''; paint();
       if (r.error === 'locked') msg('5회 오입력으로 10분간 잠겼습니다');
       else if (r.error === 'bad_pin') msg('PIN이 맞지 않습니다 (남은 횟수 ' + r.left + ')');
