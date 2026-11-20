@@ -163,6 +163,39 @@
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:rgba(32,33,36,.92);color:#fff;
       font-size:12.5px;padding:9px 14px;border-radius:10px;max-width:88%;text-align:center;display:none;z-index:80}
 
+    /* ── v23: 어제 / 오늘 / 내일 날짜 단추 ── */
+    .daynav{display:flex;gap:6px;margin:2px 10px 10px}
+    .dbtn{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:1px;padding:7px 2px;border:1px solid #dfe4de;background:#fff;border-radius:11px;
+      font-family:inherit;color:#4b5150;line-height:1.25;cursor:pointer}
+    .dbtn .dt{font-size:10.5px;font-weight:700;color:#6b716b;white-space:nowrap}
+    .dbtn .dd{font-size:13px;font-weight:800;color:#2f3532;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .dbtn.on{border-color:#2e7d32;background:#eaf4e8;box-shadow:inset 0 0 0 1px #2e7d32}
+    .dbtn.on .dt{color:#2e6b2e}
+    .dbtn.on .dd{color:#1f5d21}
+    .dbtn:active{background:#eef2ec}
+    /* ── v23: 과거 화면 — 읽기 전용 카드 (체크박스·📩 없음) ── */
+    .row.ro{grid-template-columns:var(--mw) minmax(6px,1fr) calc(var(--mw) + var(--side));padding:8px 10px}
+    .mcell2{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;min-width:0}
+    .chip2{font-size:10px;font-weight:700;border-radius:6px;padding:1px 5px;line-height:1.4;white-space:nowrap}
+    .chip2.tw{color:#2e6b2e;background:#e8f3e6}
+    .chip2.nm{color:#2f4f6f;background:#e8eef6}
+    .chip2.en{color:#B3261E;background:#fdecea}
+    .tnames .tbtn{border:0;background:none;padding:0;text-align:left;font-family:inherit;cursor:pointer}
+    .thead .ttl.green{color:#2e6b2e}
+    /* ── v23: 종료 서류 발송 여부 ── */
+    .cdrow{background:#fff;border:1px solid #e8eae6;border-radius:12px;padding:9px 11px;margin:0 10px 7px}
+    .cdtop{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+    .cdtop .cm{font-size:13.5px;font-weight:700;color:#202124}
+    .cdtop .cdt{font-size:11px;color:#8a8f8a}
+    .cdtop .cdue{margin-left:auto;font-size:10.5px;font-weight:700;color:#8a5300;background:#fdf3e0;
+      border-radius:6px;padding:1px 6px;white-space:nowrap}
+    .cdbs{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+    .bg{font-size:11px;font-weight:700;border-radius:8px;padding:2px 7px;line-height:1.5;white-space:nowrap}
+    .bg.ok{background:#e8f3e6;color:#2e6b2e}
+    .bg.miss{background:#fdecea;color:#B3261E}
+    .cdnote{margin-top:5px;font-size:10.5px;color:#9aa09a;line-height:1.45}
+
     /* ── 잠금 화면 ── */
     .app{display:none}
     .app.show{display:block}
@@ -232,6 +265,7 @@
         <button class="icobtn" id="reload" title="새로고침">↻</button>
       </div>
     </header>
+    <div class="daynav" id="daynav"></div>
     <main id="list"><div class="empty">불러오는 중…</div></main>
 
     <section class="msgbox">
@@ -269,6 +303,8 @@
     }
 
     var DATA = { items: [], checked: 0, total: 0 };
+    /* v23: 지금 보고 있는 날짜 (서버가 준 view). isToday 일 때만 카드체크·자동 동기화 */
+    var VIEW = { date: '', isToday: true, isPast: false, isFuture: false, offset: 0, short: '' };
     /* v15: 실시간 반영 상태
        · SYNCING   — 백그라운드 동기화 진행 중
        · PENDING   — 저장 요청 진행 중 건수 (그동안 자동 동기화는 쉼)
@@ -577,7 +613,7 @@
 
     /* v18: 내일 시작 산모 카드 — 오늘 목록과 섞이지 않도록
        체크박스도 📩 버튼도 없이 '산모 ↔ 관리사(1~2명)' 만 보여 줍니다. */
-    function tomorrowHtml(it) {
+    function tomorrowHtml(it, badge) {
       var cares = (it.caregivers && it.caregivers.length) ? it.caregivers : (it.caregiver ? [it.caregiver] : []);
       var names = '', i;
       for (i = 0; i < cares.length; i++) names += '<span class="tn">' + esc(cares[i]) + '</span>';
@@ -586,7 +622,7 @@
       return '<div class="row next" title="' + esc(it.start || '') + ' 시작 · 오늘 목록 아님">' +
         '<div class="mnext">' +
           '<span class="mother">' + esc(it.mother) + '</span>' +
-          '<span class="nextbadge">내일 시작</span>' +
+          '<span class="nextbadge">' + esc(badge || '내일 시작') + '</span>' +
         '</div>' +
         '<span class="line"></span>' +
         '<div class="tnames">' + names + '</div>' +
@@ -614,10 +650,23 @@
       if ((!data.motherStats || !Object.keys(data.motherStats).length) && DATA.motherStats) data.motherStats = DATA.motherStats;
       DATA = data;
       LAST_LOAD = Date.now();
+      VIEW = data.view || { date: '', isToday: true, isPast: false, isFuture: false, offset: 0, short: '' };
       document.getElementById('dateLabel').textContent = data.dateLabel || '';
+      var nav = document.getElementById('daynav');
+      if (nav) nav.innerHTML = navHtml(data);
       var list = document.getElementById('list');
       var html = '';
-      if (!data.items || !data.items.length) {
+      if (VIEW.isPast) {
+        // v23: 어제 이전 — 그 날 근무표에 적힌 출근·카드체크 기록 (읽기 전용)
+        if (!data.items || !data.items.length) {
+          html = '<div class="empty">' + esc(VIEW.short) + '에는 근무표 기록이 없습니다.</div>';
+        } else {
+          html = roListHtml(data.items);
+        }
+      } else if (VIEW.isFuture) {
+        // v23: 내일 이후 — 새로 시작 / 계속 진행 예정 (읽기 전용)
+        html = futureHtml(data);
+      } else if (!data.items || !data.items.length) {
         html = '<div class="empty">오늘 배정이 없습니다.</div>';
       } else {
         var items = data.items;
@@ -640,12 +689,165 @@
           html += rowHtml(it, i);
           i++;
         }
+        html += tomorrowSection(data);   // v18: 내일 시작 (있을 때만)
       }
-      html += tomorrowSection(data);   // v18: 내일 시작 (있을 때만)
+      html += closeDocsHtml(data);      // v23: 종료 서류 발송 여부 (있을 때만)
       list.innerHTML = html;
-      updateCount();
-      saveCache(DATA);            // v19: 다음에 열 때 0.1초 만에 그릴 수 있게 이 기기에만 저장
-      if (!data.hasTodayColumn) toast(data.sheetName + '에 오늘 날짜 열이 없습니다.');
+      var cEl = document.getElementById('count');
+      if (VIEW.isToday) updateCount();
+      else if (cEl) cEl.textContent = data.countText || '';
+      if (VIEW.isToday) saveCache(DATA);   // v19: 이 기기 캐시는 오늘 화면만 저장합니다.
+      if (VIEW.isToday && !data.hasTodayColumn) toast(data.sheetName + '에 오늘 날짜 열이 없습니다.');
+      else if (VIEW.isPast && data.hasDateColumn === false) toast(data.sheetName + '에 ' + VIEW.short + ' 열이 없습니다.');
+    }
+
+    /* ── v23: 날짜 이동 (어제 / 오늘 / 내일) ─────────────────────────
+       서버가 준 nav(3개) 를 그대로 단추로 그립니다. 날짜 계산은 서버가 하므로
+       폰 시계가 달라도 어긋나지 않습니다. */
+    var DAY_BUSY = false;
+    function navHtml(data) {
+      var nv = data.nav || [];
+      if (!nv.length) return '';
+      var h = '';
+      for (var i = 0; i < nv.length; i++) {
+        var n = nv[i];
+        h += '<button class="dbtn' + (n.active ? ' on' : '') + '" data-day="' + esc(n.date) + '" title="' + esc(n.date) + '">' +
+          '<span class="dt">' + esc(n.title) + '</span>' +
+          '<span class="dd">' + esc(n.short) + '</span>' +
+        '</button>';
+      }
+      return h;
+    }
+    function goDay(date) {
+      if (!PIN || !date || DAY_BUSY) return;
+      if (VIEW && date === VIEW.date) return;
+      DAY_BUSY = true;
+      document.getElementById('list').innerHTML = '<div class="empty">불러오는 중…</div>';
+      callApi({ action: 'load', pin: PIN, date: date }).then(function (r) {
+        DAY_BUSY = false;
+        if (!r || r.ok === false) { toast((r && r.message) || '불러오지 못했어요'); load(); return; }
+        render(r);
+        loadStats(false);
+        refreshModal();
+      }, function (e) {
+        DAY_BUSY = false;
+        toast((e && e.message) || '불러오지 못했어요');
+        load();
+      });
+    }
+
+    /* v23: 과거 화면 카드 — 산모 · 관리사(1~2명), 체크박스·📩 없음 */
+    function roListHtml(items) {
+      var html = '', i = 0;
+      while (i < items.length) {
+        var it = items[i];
+        if (it.twin && it.groupSize > 1) {
+          var group = [it], j = i + 1;
+          while (j < items.length && items[j].twin && items[j].groupSize > 1 && items[j].mother === it.mother) {
+            group.push(items[j]); j++;
+          }
+          if (group.length > 1) { html += roRowHtml(group, i); i = j; continue; }
+        }
+        html += roRowHtml([it], i);
+        i++;
+      }
+      return html;
+    }
+    function roRowHtml(group, startIdx) {
+      var it = group[0];
+      var chips = '';
+      if (group.length > 1) chips += '<span class="chip2 tw">쌍둥이</span>';
+      if (it.isNormal) chips += '<span class="chip2 nm">일반</span>';
+      if (it.endOn) chips += '<span class="chip2 en">종료</span>';
+      var lines = '';
+      for (var g = 0; g < group.length; g++) {
+        lines += '<button class="tn tbtn" data-idx="' + (startIdx + g) + '" title="서류 보기">' +
+          esc(group[g].caregiver) + '</button>';
+      }
+      var mt = 'mother tap' + (it.endOn ? ' end' : '');
+      return '<div class="row ro">' +
+        '<div class="mcell2">' +
+          '<span class="' + mt + '" data-mom="' + startIdx + '" title="눌러서 카드체크 내역">' + esc(it.mother) + '</span>' +
+          chips +
+        '</div>' +
+        '<span class="line"></span>' +
+        '<div class="tnames">' + lines + '</div>' +
+      '</div>';
+    }
+
+    /* v23: 내일 이후 화면 — '새로 시작' 과 '계속 진행 예정' 을 섞이지 않게 나눠 보여 줍니다. */
+    function futureHtml(data) {
+      var v = data.view || {};
+      var st = data.startsNext || [];
+      var out = '<section class="tsec" style="border-top:0;margin-top:2px;padding-top:0">' +
+        '<div class="thead"><span class="ttl">📌 ' + esc(v.short || '') + ' 시작</span>' +
+        '<span class="tsub">새로 시작 · ' + st.length + '명</span></div>';
+      if (!st.length) out += '<div class="empty" style="padding:14px 6px">새로 시작하는 산모가 없습니다.</div>';
+      for (var i = 0; i < st.length; i++) out += tomorrowHtml(st[i], '시작');
+      out += '</section>';
+
+      var cg = data.continuing || [];
+      out += '<section class="tsec">' +
+        '<div class="thead"><span class="ttl green">🔁 계속 진행 예정</span>' +
+        '<span class="tsub">오늘 종료분 제외 · ' + cg.length + '명</span></div>';
+      if (!cg.length) out += '<div class="empty" style="padding:14px 6px">계속 진행할 산모가 없습니다.</div>';
+      for (var k = 0; k < cg.length; k++) out += contHtml(cg[k]);
+      out += '<div class="ntnote" style="text-align:left">[배정정보] 종료일 기준으로 오늘 끝나는 산모를 뺀 목록입니다. ' +
+        '종료일이 적혀 있지 않은 건은 “종료일 미기재”로 표시했어요.</div>' +
+      '</section>';
+      return out;
+    }
+    function contHtml(it) {
+      var names = '', i;
+      var cares = it.caregivers || [];
+      for (i = 0; i < cares.length; i++) names += '<span class="tn">' + esc(cares[i]) + '</span>';
+      if (!names) names = '<span class="tnone">관리사 미정</span>';
+      var chips = '';
+      if (it.isNormal) chips += ' <span class="nbadge">일반</span>';
+      var badge = it.unknownEnd ? '종료일 미기재' : ('~' + String(it.end || '').slice(5));
+      return '<div class="row next">' +
+        '<div class="mnext">' +
+          '<span class="mother">' + esc(it.mother) + chips + '</span>' +
+          '<span class="nextbadge">' + esc(badge) + '</span>' +
+        '</div>' +
+        '<span class="line"></span>' +
+        '<div class="tnames">' + names + '</div>' +
+      '</div>';
+    }
+
+    /* v23: 종료 서류 발송 여부 — 보건소 메일 / 이폼사인 종료안내문 */
+    function sendText_(st) {
+      if (!st) return '미발송';
+      if (typeof st === 'string') return st || '미발송';
+      return st.text || (st.done ? '완료' : '미발송');
+    }
+    function badgeHtml(label, st) {
+      var done = !!(st && st.done);
+      return '<span class="bg ' + (done ? 'ok' : 'miss') + '">' + esc(label) + ' ' + esc(sendText_(st)) + '</span>';
+    }
+    function closeDocsHtml(data) {
+      var cd = data.closeDocs || [];
+      if (!cd.length) return '';
+      var v = data.view || {};
+      var sub = v.isPast ? (esc(v.short) + '까지 최근 ' + (data.closeDays || 7) + '일')
+        : ('최근 ' + (data.closeDays || 7) + '일 종료');
+      var h = '<section class="tsec"><div class="thead">' +
+        '<span class="ttl green">🗂 종료 서류 발송</span><span class="tsub">' + sub + ' · 보건소 메일 / 종료안내문</span>' +
+        '</div>';
+      for (var i = 0; i < cd.length; i++) {
+        var c = cd[i];
+        var due = '';
+        if (c.due) due = '<span class="cdue">' + (c.end === (data.today || {}).date ? '오늘 종료' : '이 날 종료') + '</span>';
+        h += '<div class="cdrow">' +
+          '<div class="cdtop">' +
+            '<span class="cm">' + esc(c.mother) + '</span>' +
+            '<span class="cdt">' + esc(c.endShort) + ' 종료</span>' + due +
+          '</div>' +
+          '<div class="cdbs">' + badgeHtml('보건소메일', c.mail) + badgeHtml('종료안내문', c.letter) + '</div>' +
+          (c.note ? '<div class="cdnote">' + esc(c.note) + '</div>' : '') +
+        '</div>';
+      }
+      return h + '</section>';
     }
 
     /* ── v19: 산모별 카드체크 일수·날짜별 내역은 화면이 뜬 뒤 따로 ──────
@@ -677,7 +879,7 @@
     function load() {
       if (!PIN) return;
       document.getElementById('list').innerHTML = '<div class="empty">불러오는 중…</div>';
-      callApi({ action: 'load', pin: PIN }).then(function (r) {
+      callApi({ action: 'load', pin: PIN, date: (VIEW && VIEW.date) || '' }).then(function (r) {
         if (!r || r.ok === false) { lockNow((r && r.message) || '다시 잠갔습니다.'); return; }
         render(r);
         loadStats(false);
@@ -695,6 +897,7 @@
        · 직전 로드 후 SYNC_GAP(4초) 안이면 건너뜁니다. */
     function syncQuiet(force) {
       if (!PIN || PIN_BUSY || SYNCING || PENDING > 0) return;
+      if (VIEW && !VIEW.isToday) return;      // v23: 어제·내일 화면은 자동 동기화하지 않습니다 (서버 사용 한도 절약)
       var lockEl = document.getElementById('lock');
       if (!lockEl || !lockEl.classList.contains('hide')) return;
       if (document.visibilityState && document.visibilityState !== 'visible') return;
@@ -763,7 +966,9 @@
        저장 요청을 보낸 직후, 서버 응답을 기다리지 않고 그 산모의 오늘 하루를
        일수·날짜별 내역에 먼저 반영합니다. (응답이 오면 서버 계산값으로 덮어씀) */
     function todayParts() {
-      var m = String(DATA.dateLabel || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*\(([^)]+)\)/);
+      // v23: 화면에 보이는 날짜가 아니라 '오늘'(서버 기준)을 씁니다.
+      var src = (DATA.today && DATA.today.label) || DATA.dateLabel || '';
+      var m = String(src).match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*\(([^)]+)\)/);
       if (!m) return null;
       return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]), dow: m[4] };
     }
@@ -941,6 +1146,10 @@
       // v20: 보기 전용에서는 체크박스를 눌러도 상태가 바뀌지 않고 안내만 합니다.
       var rochk = ev.target.closest ? ev.target.closest('.chk.ro') : null;
       if (rochk && !isAdmin_()) { ev.preventDefault(); toast(VIEWER_MSG); return; }
+      var dayBtn = ev.target.closest ? ev.target.closest('.dbtn[data-day]') : null;
+      if (dayBtn) { goDay(dayBtn.getAttribute('data-day')); return; }
+      var tbtn = ev.target.closest ? ev.target.closest('.tbtn[data-idx]') : null;
+      if (tbtn) { syncQuiet(false); openDocs(Number(tbtn.getAttribute('data-idx'))); return; }
       var sms = ev.target.closest ? ev.target.closest('.sms') : null;
       if (sms) { sendSms(Number(sms.dataset.sms)); return; }
       var mom = ev.target.closest ? ev.target.closest('.mother[data-mom]') : null;
@@ -1060,6 +1269,10 @@
           : '<div class="mcount">' + (total ? head + '<b>' + total + '</b>일 체크' : '근무표 체크 0일') + '</div>') +
         (brk.length ? '<div class="mbreak">' + esc(brk.join(' · ')) + '</div>' : '') +
         (note ? '<div class="mnote">' + esc(note) + '</div>' : '') +
+        (as && as.end
+          ? '<div class="mnote">종료 ' + esc(as.end) + ' · 보건소메일 ' + esc(sendText_(as.mail)) +
+            ' · 종료안내문 ' + esc(sendText_(as.letter)) + '</div>'
+          : '') +
         '<div class="mlisthead"><span>날짜별 체크</span><span>' + (days.length ? '최신순' : '') + '</span></div>' +
         rows +
         retroHtml(it, st) +
@@ -1076,13 +1289,13 @@
        그 날짜가 속한 달의 근무표에서 관리사 행 × 그 일자 칸에 산모 이름을 적고,
        시트에서는 그 칸 글자만 파랗게 표시합니다. (앱 화면에는 색 구분 없음) */
     function appYear() {
-      var m = String(DATA.dateLabel || '').match(/(\d{4})-/);
+      var m = String((DATA.today && DATA.today.date) || DATA.dateLabel || '').match(/(\d{4})-/);
       return m ? m[1] : String(new Date().getFullYear());
     }
     function pad2_(n) { return (n < 10 ? '0' : '') + n; }
     function fullDate_(d) { return appYear() + '-' + pad2_(d.m) + '-' + pad2_(d.d); }
     function yesterdayStr() {
-      var m = String(DATA.dateLabel || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+      var m = String((DATA.today && DATA.today.date) || DATA.dateLabel || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
       var base = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
       base.setDate(base.getDate() - 1);
       return base.getFullYear() + '-' + pad2_(base.getMonth() + 1) + '-' + pad2_(base.getDate());
