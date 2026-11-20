@@ -451,16 +451,6 @@ function openSubmitSheet() {
     '</div></div>');
   document.body.appendChild(sheet);
   sheet.querySelector('#cancel').addEventListener('click', function () { sheet.remove(); });
-  var reuseBtn = sheet.querySelector('#reuse');
-  if (reuseBtn) reuseBtn.addEventListener('click', function () {
-    var key = Object.keys(S.signs)[0];
-    if (!key) return;
-    S.signs[f.id] = S.signs[key];
-    var node = fieldEls[f.id];
-    node.querySelector('img').src = S.signs[key];
-    node.classList.add('on');
-    sheet.remove(); updateBar();
-  });
   sheet.querySelector('#ok').addEventListener('click', function () { sheet.remove(); doSubmit(); });
 }
 
@@ -499,7 +489,7 @@ function showDone(r) {
   app.appendChild(el('<div>' +
     '<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
     '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
-    '<div class="wrap">'
+    '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:28px 16px">' +
     '<div style="font-size:40px;line-height:1">✅</div>' +
     '<h2 style="margin-top:10px">서명이 완료되었습니다</h2>' +
