@@ -633,7 +633,13 @@
     /* 내일 시작하는 산모가 있을 때만, 오늘 목록 아래에 구분선과 함께 붙입니다. */
     function tomorrowSection(data) {
       var ts = data.tomorrowStarts || [];
-      if (!ts.length) return '';
+      if (!ts.length) {
+        // v24: 내일 시작이 없어도 '없음'을 한 줄로 분명히 보여 줍니다 (오늘 화면에서 가장 먼저 확인할 것)
+        return '<section class="tsec"><div class="thead">' +
+          '<span class="ttl">📌 내일 시작 (' + esc(data.tomorrowShort || '') + ')</span>' +
+          '<span class="tsub">내일 시작하는 산모 없음</span>' +
+        '</div></section>';
+      }
       var html = '<section class="tsec">' +
         '<div class="thead">' +
           '<span class="ttl">📌 내일 시작 (' + esc(data.tomorrowShort || '') + ')</span>' +
