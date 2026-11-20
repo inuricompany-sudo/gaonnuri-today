@@ -5,12 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1d6f5a">
 <title>가온누리 전자계약</title>
+<meta name="description" content="관리사님 계약서식 검토 및 전자서명을 진행해 주세요.">
+<!-- 카톡·문자에 링크만 붙여도 카드 미리보기가 뜨도록 -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="가온누리산후도우미">
+<meta property="og:title" content="[가온누리산후도우미] 전자계약 서명 요청">
+<meta property="og:description" content="관리사님 계약서식 검토 및 전자서명을 진행해 주세요.">
+<meta property="og:url" content="https://inuricompany-sudo.github.io/gaonnuri-today/esign/">
+<meta property="og:image" content="https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="가온누리산후도우미 전자계약 서명 요청">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="[가온누리산후도우미] 전자계약 서명 요청">
+<meta name="twitter:description" content="관리사님 계약서식 검토 및 전자서명을 진행해 주세요.">
+<meta name="twitter:image" content="https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png">
 <!--
   가온누리 전자계약 (원본 계약서 화면)
   - 원본 문서: 관리사님 계약서식(이폼사인 백업) 4쪽(지사별) 그대로 표시
+  - 수신자 흐름: 문서 도착 안내 → 전자서명 동의 → 계약서 작성 → 제출
   - 공개 저장소에는 개인정보·PIN 없음. 데이터는 Apps Script에서 내려옵니다.
 -->
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=8">
 </head>
 <body>
 <div id="app"><div class="notice">불러오는 중입니다…</div></div>
@@ -18,6 +34,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="fields.js?v=7"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

@@ -160,8 +160,9 @@ function showRecipient(token) {
     }
     CT = r.contract; CO = r.company || {};
     S = { checks: {}, signs: {}, filledFirst: false };
+    CONSENT_OK = false; CONSENT_AT = '';
     if (CT.status === '완료') { showAlreadyDone(); return; }
-    buildRecipientUi();
+    showIntro();
   }).catch(function () {
     app.innerHTML = '<div class="notice err">네트워크 오류로 계약서를 불러오지 못했습니다. 새로고침해 주세요.</div>';
   });
@@ -188,6 +189,115 @@ function summaryCard() {
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
     '<div class="kv"><span class="k">계약기간</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '</div>';
+}
+
+/* =============================================================
+   문서 도착 안내(랜딩) → 전자서명 동의 → 계약서 작성
+   이폼사인 서명 전 단계 화면을 그대로 옮긴 흐름
+   ============================================================= */
+var CONSENT_OK = false, CONSENT_AT = '';
+
+function docTitle() {
+  return (CT.type || '관리사님 계약서식') + ' (' + (CO.branch || CT.branch) + '지사)';
+}
+function fmtYMD(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function deadlineOf() {   // 문서 제출 기한: 생성일 + 7일
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(CT.created || ''));
+  var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  d.setDate(d.getDate() + 7);
+  return d;
+}
+
+function showIntro() {
+  var dl = deadlineOf(), late = fmtYMD(dl) < fmtYMD(new Date());
+  app.innerHTML = '';
+  app.appendChild(el('<div class="intro">' +
+    '<div class="brandbar"><span class="mark">가</span><span class="bn">가온누리산후도우미</span></div>' +
+    '<div class="pad">' +
+    '<h1>검토할 문서가 도착하였습니다.</h1>' +
+    '<p class="lead">' + esc(CT.type || '관리사님 계약서식') + ' 내용을 검토하시고, 작성 후 전송해 주세요.</p>' +
+    '<p class="hint">아래 <b>문서 검토 및 작성</b> 버튼을 눌러 문서를 검토하세요.</p>' +
+    '<p class="deadline' + (late ? ' late' : '') + '">문서 제출 기한은 <b>' + fmtYMD(dl) + '</b>까지입니다.' +
+    (late ? '<br>기한이 지났습니다. 담당자에게 문의해 주세요.' : '') + '</p>' +
+    '<button class="bigbtn" id="startBtn">문서 검토 및 작성</button>' +
+    '<div class="summary">' +
+    '<div class="row"><span class="k">문서 제목 :</span><span class="v">' + esc(docTitle()) + '</span></div>' +
+    '<div class="row"><span class="k">보낸 사람 :</span><span class="v">가온누리산후도우미</span></div>' +
+    '<div class="row"><span class="k">수신인 :</span><span class="v">' + esc(CT.name) + '님</span></div>' +
+    '<div class="row"><span class="k">계약기간 :</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
+    '</div>' +
+    '<div class="policy">' +
+    '<h3>개인정보처리방침</h3>' +
+    '<h4>* 링크를 다른 사람에게 공유하지 마십시오.</h4>' +
+    '<p>이 링크는 ' + esc(CT.name) + '님에게 보낸 문서 링크입니다. 수신인 외 다른 사람이 열람하여 발생하는 문제에 대해서는 가온누리산후도우미가 책임지지 않습니다.</p>' +
+    '<h4>* 어떻게 작성해야 하나요?</h4>' +
+    '<p>위 <b>문서 검토 및 작성</b> 버튼을 클릭하면 문서 작성 화면으로 이동합니다. 표시된 입력 항목에 동의 및 서명을 진행해 주세요.</p>' +
+    '<h4>* 버튼을 눌러도 문서가 보이지 않습니다.</h4>' +
+    '<p>문서 작성 유효기간이 만료되었거나 문서가 수정 중일 수 있습니다. 문서를 보낸 사람에게 문의하십시오.</p>' +
+    '</div>' +
+    '<div class="foot">가온누리산후도우미 · 전자계약</div>' +
+    '</div></div>'));
+  $('#startBtn').addEventListener('click', function () {
+    buildRecipientUi();     // 실제 계약서 화면(하단 바는 동의 전 비활성)
+    showConsent();          // 서명 전 전자문서·전자서명 동의
+  });
+  window.scrollTo(0, 0);
+}
+
+/* 전자문서 및 전자서명 사용 동의 패널 (문서 화면 위 상단 오버레이) */
+function showConsent() {
+  var old = $('#consent'); if (old) old.remove();
+  var ov = el('<div class="consent" id="consent">' +
+    '<div class="cbox">' +
+    '<div class="chead">' + esc(docTitle()) + '</div>' +
+    '<div class="cbody">' +
+    '<p class="cq">전자문서 및 전자서명 사용 동의서를 확인하시고 동의 여부를 체크해 주세요.</p>' +
+    '<label class="ck" id="ck"><input type="checkbox" id="ckin"><span class="bx"></span>' +
+    '<span class="ct">전자문서 및 전자서명 사용에 동의합니다.</span></label>' +
+    '<button class="more" id="cmore">[자세히 보기]</button>' +
+    '<div class="crow"><button class="btn gray" id="cgo" disabled>계속</button></div>' +
+    '</div></div>' +
+    '<div class="peek">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '님 계약서</div>' +
+    '</div>');
+  document.body.appendChild(ov);
+  var ck = $('#ckin', ov), go = $('#cgo', ov);
+  ck.addEventListener('change', function () {
+    $('#ck', ov).classList.toggle('on', ck.checked);
+    go.disabled = !ck.checked;
+    go.className = 'btn' + (ck.checked ? '' : ' gray');
+  });
+  $('#cmore', ov).addEventListener('click', showConsentDetails);
+  go.addEventListener('click', function () {
+    if (!ck.checked) return;
+    CONSENT_OK = true; CONSENT_AT = todayParts().y + '-' + pad2(todayParts().m) + '-' + pad2(todayParts().d) +
+      ' ' + pad2(new Date().getHours()) + ':' + pad2(new Date().getMinutes()) + ':' + pad2(new Date().getSeconds());
+    ov.remove();
+    updateBar();
+    api({ action: 'consent', token: CT.token, at: CONSENT_AT, ua: navigator.userAgent }).catch(function () { });
+    var wrap = $('#docwrap'); if (wrap) wrap.scrollTop = 0;
+    window.scrollTo(0, 0);
+  });
+}
+
+function showConsentDetails() {
+  var s = el('<div class="sheet" id="lawsheet"><div class="panel lawpanel">' +
+    '<h3>전자문서 및 전자서명 안내</h3>' +
+    '<div class="law">' +
+    '<h4>전자문서 및 전자서명의 효력</h4>' +
+    '<p>· 「전자문서 및 전자거래 기본법」 제4조에 따라 전자문서는 다른 법령에 특별한 규정이 있는 경우를 제외하고 문서로서의 효력이 인정됩니다.</p>' +
+    '<p>· 같은 법 제7조에 따라 전자문서는 작성자 등의 명의로 작성된 것임이 표시되고 그 내용을 확인할 수 있는 상태로 송신·수신된 경우 작성자 등의 의사표시가 기재된 것으로 봅니다.</p>' +
+    '<p>· 「전자서명법」 제3조에 따라 전자서명은 다른 법령에 특별한 규정이 있는 경우를 제외하고 서명 또는 서명날인과 같은 효력을 가집니다.</p>' +
+    '<p>· 이 계약의 전자서명은 수신인 본인이 직접 작성하며, 동의·작성·제출 일시와 접속 환경이 기록·보관됩니다.</p>' +
+    '<h4>이용 안내</h4>' +
+    '<p>· 링크는 수신인 본인만 열람해 주세요. 다른 사람과 공유하지 마십시오.</p>' +
+    '<p>· 서명을 제출한 뒤에는 수정이 어려우니 입력 내용을 다시 한 번 확인해 주세요.</p>' +
+    '<p>· 문의: 가온누리산후도우미 담당자</p>' +
+    '</div>' +
+    '<div style="margin-top:14px"><button class="btn" id="lawok">확인</button></div>' +
+    '</div></div>');
+  document.body.appendChild(s);
+  s.querySelector('#lawok').addEventListener('click', function () { s.remove(); });
+  s.addEventListener('click', function (e) { if (e.target === s) s.remove(); });
 }
 
 function buildRecipientUi() {
@@ -317,7 +427,7 @@ function updateBar() {
   pips.innerHTML = html;
   var all = done === req.length;
   btn.textContent = all ? '작성 완료 · 제출하기' : (done === 0 ? '입력 시작' : '다음 항목');
-  btn.disabled = false;
+  btn.disabled = !CONSENT_OK;      // 전자서명 동의 전에는 시작할 수 없음
 }
 
 function nextUnfilled() {
@@ -544,6 +654,7 @@ function doSubmit() {
     return api({
       action: 'submit', token: CT.token,
       checks: S.checks, signs: S.signs,
+      consentAt: CONSENT_AT,
       pdf: b64, ua: navigator.userAgent
     });
   }).then(function (r) {
@@ -798,19 +909,56 @@ function renderCreate() {
       var btn = $('#c_ok'); if (btn) btn.disabled = false;
       if (!r.ok) { toast('실패: ' + (r.error || '오류')); return; }
       var link = location.origin + location.pathname + '?t=' + r.token;
+      var item = { token: r.token, type: '관리사님 계약서식', branch: p.branch, name: p.name, start: p.start, end: p.end };
       var box = $('#c_result');
-      box.innerHTML = '<div class="muted small" style="margin-bottom:6px">계약 링크가 만들어졌습니다. 관리사님께 이 링크를 보내 주세요.</div>' +
-        '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"><button class="btn" style="width:auto;padding:10px 14px" id="c_copy">복사</button></div>';
+      box.innerHTML = '<div class="muted small" style="margin-bottom:6px">계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.</div>' +
+        '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
+        '<div class="copybtns"><button class="btn gray" id="c_copy">링크 복사</button>' +
+        '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
       box.querySelector('#c_copy').addEventListener('click', function () {
         var i = box.querySelector('#c_link'); i.select(); i.setSelectionRange(0, 999);
-        if (navigator.clipboard) navigator.clipboard.writeText(link).then(function () { toast('링크를 복사했습니다'); });
-        else { document.execCommand('copy'); toast('링크를 복사했습니다'); }
+        copyText(link).then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다. 길게 눌러 복사해 주세요.'); });
       });
+      box.querySelector('#c_text').addEventListener('click', function () { copyGuide(item); });
     }).catch(function () { var btn = $('#c_ok'); if (btn) btn.disabled = false; toast('네트워크 오류'); });
   });
 }
 function refreshList() {
   api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); });
+}
+
+/* 문자·카톡 전달용 안내문 원클릭 복사 */
+function copyText(text) {
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.top = '0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(function () { return true; })
+      .catch(function () { return fallback(); });
+  }
+  return Promise.resolve(fallback());
+}
+function guideTextOf(c) {
+  var branch = c.branch || '계룡';
+  var link = location.origin + location.pathname + '?t=' + c.token;
+  return '[전자계약] 서명 요청이 왔습니다.\n\n' +
+    '▶ 문서 제목\n' + (c.type || '관리사님 계약서식') + ' (' + branch + '지사)\n\n' +
+    '▶ 보낸 사람\n가온누리산후도우미\n\n' +
+    '▶ 대상자\n' + (c.name || '') + ' 님 (' + (c.start || '') + ' ~ ' + (c.end || '') + ')\n\n' +
+    '▶ 문서 서명하기\n' + link + '\n\n' +
+    '*본 메시지와 링크는 외부에 공유되지 않도록 주의해 주세요.';
+}
+function copyGuide(c) {
+  return copyText(guideTextOf(c)).then(function (ok) {
+    toast(ok ? '안내문을 복사했습니다. 카톡·문자에 붙여넣어 보내세요.' : '복사에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+  });
 }
 function openDetail(token) {
   api({ action: 'detail', sid: SID, token: token }).then(function (r) {
@@ -826,6 +974,8 @@ function openDetail(token) {
       '<div class="kv"><span class="k">생성</span><span class="v">' + esc(c.created || '-') + '</span></div>' +
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
+      '<div class="copybtns"><button class="btn gray" id="d_link">링크 복사</button>' +
+      (c.status === '완료' ? '' : '<button class="btn" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
       '<div id="d_sigs" style="margin-top:12px"></div>' +
       '<div style="margin-top:14px"><button class="btn" id="d_pdf">최종 PDF 보기</button></div>' +
       '<div id="d_view" style="margin-top:12px"></div>' +
@@ -833,6 +983,12 @@ function openDetail(token) {
       '</div></div>');
     document.body.appendChild(sheet);
     sheet.querySelector('#d_close').addEventListener('click', function () { sheet.remove(); });
+    sheet.querySelector('#d_link').addEventListener('click', function () {
+      copyText(location.origin + location.pathname + '?t=' + token)
+        .then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다.'); });
+    });
+    var dtext = sheet.querySelector('#d_text');
+    if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
     if (c.signs) {
       var h = '<div class="muted small" style="margin-bottom:6px">서명</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
       Object.keys(c.signs).forEach(function (id) {
