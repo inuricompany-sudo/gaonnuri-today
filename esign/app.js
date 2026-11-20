@@ -319,12 +319,47 @@ function goNext() {
   if (f.t === 'sign') setTimeout(function () { openSignPad(f); }, 420);
 }
 
+/* ---------------- 서명: 한 번 서명하면 서명란 전체에 적용 ---------------- */
+function signFieldIds() {
+  return reqFields().filter(function (f) { return f.t === 'sign'; }).map(function (f) { return f.id; });
+}
+function paintSignNode(id, data) {
+  var n = fieldEls[id]; if (!n) return;
+  var im = n.querySelector('img'); if (im) im.src = data;
+  n.classList.add('on');
+  n.classList.remove('flash');
+}
+function applySignAll(data, fromId) {
+  var ids = signFieldIds();
+  if (!ids.length && fromId) ids = [fromId];
+  ids.forEach(function (id) { S.signs[id] = data; paintSignNode(id, data); });
+  return ids.length;
+}
+function afterSignApply() {
+  updateBar();
+  var ids = signFieldIds();
+  var left = reqFields().filter(function (f) { return !isDone(f); });
+  if (!left.length) { toast('필수 항목을 모두 채웠습니다. 제출해 주세요.'); return; }
+  toast('서명을 서명란 ' + ids.length + '곳에 모두 적용했습니다');
+  var nf = nextUnfilled();
+  if (nf && nf.t === 'check') {
+    var n = fieldEls[nf.id];
+    if (n) setTimeout(function () {
+      n.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      n.classList.add('flash');
+      setTimeout(function () { n.classList.remove('flash'); }, 2400);
+    }, 380);
+  }
+}
+
 /* ---------------- 서명 패드 ---------------- */
 function openSignPad(f) {
   var title = f.p === 1 ? '개인정보 동의 서명' : (f.p === 2 || f.p === 3 ? '보안각서 서명' : '계약서 서명');
+  var signN = signFieldIds().length || 1;
   var sheet = el('<div class="sheet"><div class="panel">' +
     '<h3>' + title + '</h3>' +
-    '<div class="muted small">아래 칸에 손글씨로 서명해 주세요.</div>' +
+    '<div class="muted small">아래 칸에 손글씨로 서명해 주세요.' +
+    (signN > 1 ? ' 한 번만 서명하면 서명란 <b>' + signN + '곳</b>에 모두 적용됩니다.' : '') + '</div>' +
     '<div class="padwrap"><canvas></canvas><div class="ph">여기에 서명</div></div>' +
     '<div class="hintline"><button class="linkbtn" id="clr">다시 쓰기</button>' +
     (Object.keys(S.signs).length ? '<button class="linkbtn" id="reuse" style="color:var(--brand)">최근 서명 그대로</button>' : '') +
@@ -335,7 +370,8 @@ function openSignPad(f) {
 
   var cv = sheet.querySelector('canvas'), wrap = sheet.querySelector('.padwrap'), ph = sheet.querySelector('.ph');
   var ctx = cv.getContext('2d'), dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  var drawn = false, drawing = false, last = null;
+  var drawn = false, drawing = false, last = null, prevMid = null;
+  var LW = 3.4;
   function resize() {
     var r = wrap.getBoundingClientRect();
     var w = Math.max(200, r.width), h = 230;
@@ -343,7 +379,9 @@ function openSignPad(f) {
     cv.style.height = h + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+    ctx.lineWidth = LW; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    drawing = false; last = null; prevMid = null;
   }
   setTimeout(resize, 30);
   function pos(e) {
@@ -351,18 +389,41 @@ function openSignPad(f) {
     return { x: (e.clientX - r.left), y: (e.clientY - r.top) };
   }
   cv.addEventListener('pointerdown', function (e) {
-    e.preventDefault(); drawing = true; drawn = true; ph.style.display = 'none';
-    cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
-    last = pos(e); ctx.beginPath(); ctx.arc(last.x, last.y, 1.2, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+    if (e.pointerType === 'mouse' && e.button > 0) return;
+    e.preventDefault();
+    drawing = true; drawn = true; ph.style.display = 'none';
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { }
+    last = pos(e); prevMid = { x: last.x, y: last.y };
+    // 살짝 눌렀다 떼도 점이 찍히도록 시작점에 둥근 점
+    ctx.beginPath(); ctx.arc(last.x, last.y, Math.max(1.7, LW / 2), 0, Math.PI * 2); ctx.fill();
   });
   cv.addEventListener('pointermove', function (e) {
-    if (!drawing) return; e.preventDefault();
-    var p = pos(e), mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
-    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y); ctx.stroke();
-    last = p;
+    if (!drawing || !last) return;
+    e.preventDefault();
+    var p = pos(e);
+    var dx = p.x - last.x, dy = p.y - last.y;
+    if ((dx * dx + dy * dy) < 0.04) return;   // 같은 자리 반복 이벤트 무시
+    var mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
+    // 이전 중간점 → 현재 점(제어점) → 새 중간점 : 빈틈 없는 연속 곡선
+    ctx.beginPath();
+    ctx.moveTo(prevMid.x, prevMid.y);
+    ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y);
+    ctx.stroke();
+    prevMid = mid; last = p;
   });
-  cv.addEventListener('pointerup', function () { drawing = false; });
-  cv.addEventListener('pointercancel', function () { drawing = false; });
+  function endStroke(e) {
+    if (!drawing) return;
+    drawing = false;
+    if (last && prevMid) {
+      // 마지막 중간점에서 실제 마지막 점까지 마저 이어 붙임
+      ctx.beginPath(); ctx.moveTo(prevMid.x, prevMid.y); ctx.lineTo(last.x, last.y); ctx.stroke();
+    }
+    last = null; prevMid = null;
+  }
+  cv.addEventListener('pointerup', endStroke);
+  cv.addEventListener('pointercancel', endStroke);
+  cv.addEventListener('pointerleave', endStroke);
+  cv.addEventListener('lostpointercapture', endStroke);
 
   sheet.querySelector('#clr').addEventListener('click', function () { resize(); drawn = false; ph.style.display = ''; });
   sheet.querySelector('#cancel').addEventListener('click', function () { sheet.remove(); });
@@ -370,23 +431,17 @@ function openSignPad(f) {
   if (reuseBtn) reuseBtn.addEventListener('click', function () {
     var key = Object.keys(S.signs)[0];
     if (!key) return;
-    S.signs[f.id] = S.signs[key];
-    var node = fieldEls[f.id];
-    node.querySelector('img').src = S.signs[key];
-    node.classList.add('on');
-    sheet.remove(); updateBar();
+    sheet.remove();
+    applySignAll(S.signs[key], f.id);
+    afterSignApply();
   });
   sheet.querySelector('#ok').addEventListener('click', function () {
     if (!drawn) { toast('서명을 먼저 해 주세요'); return; }
     var data = trimCanvas(cv);
     if (!data) { toast('서명을 먼저 해 주세요'); return; }
-    S.signs[f.id] = data;
-    var n = fieldEls[f.id];
-    n.querySelector('img').src = data;
-    n.classList.add('on');
     sheet.remove();
-    updateBar();
-    if (doneCount() === reqFields().length) toast('필수 항목을 모두 채웠습니다. 제출해 주세요.');
+    applySignAll(data, f.id);
+    afterSignApply();
   });
   sheet.addEventListener('click', function (e) { if (e.target === sheet) sheet.remove(); });
 }
