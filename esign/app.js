@@ -13,7 +13,14 @@ var SIDKEY = 'esign_sid_v3';
 
 /* ---------------- 공통 ---------------- */
 function $(s, r) { return (r || document).querySelector(s); }
-function el(html) { var d = document.createElement('div'); d.innerHTML = String(html).trim(); return d.firstElementChild; }
+function el(html) {
+  var t = document.createElement('template');
+  t.innerHTML = String(html).trim();
+  if (t.content.children.length === 1) return t.content.firstElementChild;
+  var d = document.createElement('div');
+  d.appendChild(t.content);
+  return d;
+}
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
