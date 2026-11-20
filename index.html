@@ -183,7 +183,7 @@
     .chip2.en{color:#B3261E;background:#fdecea}
     .tnames .tbtn{border:0;background:none;padding:0;text-align:left;font-family:inherit;cursor:pointer}
     .thead .ttl.green{color:#2e6b2e}
-    /* ── v23: 종료 서류 발송 여부 ── */
+    /* ── v23: 종료 서류 발송 여부 (v24: 어제 화면에서만 사용) ── */
     .cdrow{background:#fff;border:1px solid #e8eae6;border-radius:12px;padding:9px 11px;margin:0 10px 7px}
     .cdtop{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
     .cdtop .cm{font-size:13.5px;font-weight:700;color:#202124}
@@ -691,7 +691,8 @@
         }
         html += tomorrowSection(data);   // v18: 내일 시작 (있을 때만)
       }
-      html += closeDocsHtml(data);      // v23: 종료 서류 발송 여부 (있을 때만)
+      // v24: 종료 서류 발송 구역은 '어제' 화면에서만 (오늘·내일은 목록·예정만 깔끔하게)
+      if (VIEW.isPast) html += closeDocsHtml(data);
       list.innerHTML = html;
       var cEl = document.getElementById('count');
       if (VIEW.isToday) updateCount();
@@ -815,7 +816,7 @@
       '</div>';
     }
 
-    /* v23: 종료 서류 발송 여부 — 보건소 메일 / 이폼사인 종료안내문 */
+    /* v23: 종료 서류 발송 여부 — 보건소 메일 / 이폼사인 종료안내문 (v24: view.isPast 일 때만 호출) */
     function sendText_(st) {
       if (!st) return '미발송';
       if (typeof st === 'string') return st || '미발송';
