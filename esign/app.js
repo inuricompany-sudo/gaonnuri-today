@@ -539,7 +539,7 @@ function hideLoading() { var l = $('#load'); if (l) l.remove(); }
 function doSubmit() {
   if (_submitting) return;
   _submitting = true;
-  showLoading('계약서를 저장하고 있어요', '2~3초면 끝납니다. 창을 닫지 말아 주세요');
+  showLoading('계약서를 저장하고 있어요', '3~5초면 끝납니다. 창을 닫지 말아 주세요');
   buildFinalPdf().then(function (b64) {
     return api({
       action: 'submit', token: CT.token,
