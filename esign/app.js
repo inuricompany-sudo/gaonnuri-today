@@ -373,7 +373,7 @@ function buildField(f) {
     'width:' + (f.w / PW * 100).toFixed(4) + '%;height:' + (f.h / PH * 100).toFixed(4) + '%;';
   var node;
   if (f.t === 'text') {
-    node = el('<div class="f txt' + (f.align === 'r' ? ' ta-r' : '') + '" style="' + styles + '"><span class="val"></span></div>');
+    node = el('<div class="f txt' + (f.padr ? ' ta-r' : '') + '" style="' + styles + '"><span class="val"></span></div>');
     var v = valOf(f, CT);
     node.querySelector('.val').textContent = v;
     node.title = v;
@@ -461,6 +461,7 @@ function layoutDoc() {
       var size = fitFont(v, f.w, f.h);
       var sp = n.querySelector('.val');
       sp.style.fontSize = (size * k).toFixed(2) + 'px';
+      if (f.padr) n.style.paddingRight = (f.padr * k).toFixed(2) + 'px';
     } else if (f.t === 'radio') {
       layoutRadio(f, n, k);
     } else if (f.t === 'area') {
@@ -798,9 +799,9 @@ function textOverlayCanvas(f, v) {
   ctx.font = '500 ' + size.toFixed(2) + 'px ' + FONT;
   ctx.fillStyle = '#111';
   ctx.textBaseline = 'middle';
-  var right = f.align === 'r';
+  var right = f.padr != null;
   ctx.textAlign = right ? 'right' : 'left';
-  ctx.fillText(v, (right ? f.w * 0.97 : f.w * 0.02) * k, f.h * 0.53 * k, f.w * 0.97 * k);
+  ctx.fillText(v, (right ? (f.w - f.padr) : f.w * 0.02) * k, f.h * 0.53 * k, f.w * 0.97 * k);
   return cv;
 }
 function prepareOut() {                      // 서명 전에 미리 만들어 두는 기본 문서
