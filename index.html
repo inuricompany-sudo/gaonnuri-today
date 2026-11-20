@@ -185,6 +185,8 @@
     .thead .ttl.green{color:#2e6b2e}
     /* ── v23: 종료 서류 발송 여부 (v24: 어제 화면에서만 사용) ── */
     .cdrow{background:#fff;border:1px solid #e8eae6;border-radius:12px;padding:9px 11px;margin:0 10px 7px}
+    /* v26: 오늘 종료·오늘 발송분은 살짝 다른 배경으로 구분 */
+    .cdrow.today{background:#f5faf4;border-color:#cfe4cb}
     .cdtop{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
     .cdtop .cm{font-size:13.5px;font-weight:700;color:#202124}
     .cdtop .cdt{font-size:11px;color:#8a8f8a}
@@ -836,16 +838,20 @@
       var cd = data.closeDocs || [];
       if (!cd.length) return '';
       var v = data.view || {};
-      var sub = v.isPast ? (esc(v.short) + '까지 최근 ' + (data.closeDays || 7) + '일')
+      var td = (data.today || {}).date || '';
+      var tShort = td ? (Number(td.slice(5, 7)) + '/' + Number(td.slice(8, 10))) : '';
+      // v26: '어제' 화면에서는 어제 종료분 + 오늘 종료·오늘 발송분을 함께 보여 줍니다.
+      var sub = v.isPast ? (esc(v.short) + (tShort && tShort !== v.short ? '~' + esc(tShort) + '(오늘) 종료' : ' 종료'))
         : ('최근 ' + (data.closeDays || 7) + '일 종료');
       var h = '<section class="tsec"><div class="thead">' +
-        '<span class="ttl green">🗂 종료 서류 발송</span><span class="tsub">' + sub + ' · 보건소 메일 / 종료안내문</span>' +
+        '<span class="ttl green">🗂 종료 서류 발송</span><span class="tsub">' + sub + '</span>' +
         '</div>';
       for (var i = 0; i < cd.length; i++) {
         var c = cd[i];
+        var isTodayEnd = !!(td && c.end === td);
         var due = '';
-        if (c.due) due = '<span class="cdue">' + (c.end === (data.today || {}).date ? '오늘 종료' : '이 날 종료') + '</span>';
-        h += '<div class="cdrow">' +
+        if (isTodayEnd) due = '<span class="cdue">오늘 종료</span>';
+        h += '<div class="cdrow' + (isTodayEnd ? ' today' : '') + '">' +
           '<div class="cdtop">' +
             '<span class="cm">' + esc(c.mother) + '</span>' +
             '<span class="cdt">' + esc(c.endShort) + ' 종료</span>' + due +
