@@ -52,9 +52,9 @@ var CONTRACT_FIELDS = [
 
 /* 서비스 종료안내모니터링(03) 5쪽 — 수신자(산모)가 서명 1곳 + 모니터링 13문항을 작성 */
 var CLOSE_FIELDS = [
-  {id:'c_endY', t:'text', p:1, x:323.25, y:209.25, w:54.75, h:18.75, src:'p:endY'},
-  {id:'c_endM', t:'text', p:1, x:399.75, y:210, w:54, h:18.75, src:'p:endM'},
-  {id:'c_endD', t:'text', p:1, x:470.25, y:210, w:44.25, h:17.25, src:'p:endD'},
+  {id:'c_endY', t:'text', p:1, x:323.25, y:209.25, w:54.75, h:18.75, src:'p:endY', align:'r'},
+  {id:'c_endM', t:'text', p:1, x:399.75, y:210, w:54, h:18.75, src:'p:endM', align:'r'},
+  {id:'c_endD', t:'text', p:1, x:470.25, y:210, w:44.25, h:17.25, src:'p:endD', align:'r'},
   {id:'c_user', t:'text', p:1, x:181.5, y:277.5, w:111, h:31.5, src:'p:user'},
   {id:'c_worker', t:'text', p:1, x:419.25, y:277.5, w:109.5, h:32.25, src:'p:worker'},
   {id:'c_voucher', t:'text', p:1, x:181.5, y:311.25, w:110.25, h:31.5, src:'p:voucher'},
@@ -64,9 +64,9 @@ var CLOSE_FIELDS = [
   {id:'c_beforeWorker', t:'text', p:1, x:232.5, y:506.25, w:290.25, h:25.5, src:'p:beforeWorker'},
   {id:'c_afterPeriod', t:'text', p:1, x:232.5, y:540.75, w:290.25, h:25.5, src:'p:afterPeriod'},
   {id:'c_afterWorker', t:'text', p:1, x:232.5, y:572.25, w:288.75, h:25.5, src:'p:afterWorker'},
-  {id:'c_applyY', t:'text', p:1, x:170.25, y:704.25, w:54.75, h:18.75, src:'p:applyY'},
-  {id:'c_applyM', t:'text', p:1, x:231, y:704.25, w:54, h:18.75, src:'p:applyM'},
-  {id:'c_applyD', t:'text', p:1, x:294, y:704.25, w:44.25, h:17.25, src:'p:applyD'},
+  {id:'c_applyY', t:'text', p:1, x:170.25, y:704.25, w:54.75, h:18.75, src:'p:applyY', align:'r'},
+  {id:'c_applyM', t:'text', p:1, x:231, y:704.25, w:54, h:18.75, src:'p:applyM', align:'r'},
+  {id:'c_applyD', t:'text', p:1, x:294, y:704.25, w:44.25, h:17.25, src:'p:applyD', align:'r'},
   {id:'sig1', t:'sign', p:1, x:351.75, y:644.25, w:112.5, h:45.0, src:'sig1', req:true},
   {id:'c_user3', t:'text', p:3, x:182.25, y:112.5, w:101.25, h:18.75, src:'p:user'},
   {id:'c_worker3', t:'text', p:3, x:333, y:112.5, w:98.25, h:18.75, src:'p:worker'},

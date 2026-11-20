@@ -373,7 +373,7 @@ function buildField(f) {
     'width:' + (f.w / PW * 100).toFixed(4) + '%;height:' + (f.h / PH * 100).toFixed(4) + '%;';
   var node;
   if (f.t === 'text') {
-    node = el('<div class="f txt" style="' + styles + '"><span class="val"></span></div>');
+    node = el('<div class="f txt' + (f.align === 'r' ? ' ta-r' : '') + '" style="' + styles + '"><span class="val"></span></div>');
     var v = valOf(f, CT);
     node.querySelector('.val').textContent = v;
     node.title = v;
@@ -479,7 +479,7 @@ function layoutRadio(f, n, k) {
     var box = o.querySelector('.box');
     box.style.width = size + 'px';
     box.style.height = size + 'px';
-    box.style.left = (cx - size / 2).toFixed(1) + 'px';
+    box.style.left = (cx + (f.bw * k) / 2 - size).toFixed(1) + 'px';
   });
 }
 function layoutArea(f, n) {
@@ -777,7 +777,7 @@ function showDone(r) {
     '</div>' +
     summaryCard() +
     '<div class="card"><h2>안내</h2><p class="muted small" style="margin:0">' +
-    '서명하신 ' + (isClose() ? '종료안내문' : '계약서') + '는 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
+    '서명하신 ' + (isClose() ? '종료안내문은' : '계약서는') + ' 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
     '문의: 가온누리 산후도우미 담당자</p></div></div></div>'));
 }
 
@@ -798,7 +798,9 @@ function textOverlayCanvas(f, v) {
   ctx.font = '500 ' + size.toFixed(2) + 'px ' + FONT;
   ctx.fillStyle = '#111';
   ctx.textBaseline = 'middle';
-  ctx.fillText(v, f.w * 0.02 * k, f.h * 0.53 * k, f.w * 0.97 * k);
+  var right = f.align === 'r';
+  ctx.textAlign = right ? 'right' : 'left';
+  ctx.fillText(v, (right ? f.w * 0.97 : f.w * 0.02) * k, f.h * 0.53 * k, f.w * 0.97 * k);
   return cv;
 }
 function prepareOut() {                      // 서명 전에 미리 만들어 두는 기본 문서
