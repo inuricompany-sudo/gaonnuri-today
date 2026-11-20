@@ -1,13 +1,14 @@
 /* =============================================================
    가온누리 전자계약 — 원본 계약서 화면 + 원본 동일 PDF 생성
    · 화면: 원본 PDF(관리사님 계약서식) 페이지 위에 필드 오버레이
-   · 제출: 같은 좌표로 200dpi 캔버스 합성 → PDF(4쪽) → Apps Script 저장
+   · 제출: 원본 PDF의 4쪽을 그대로 복사(벡터)하고 입력 글자·체크·서명만 얹어 저장
+     → 글자는 원본과 100% 같은 선명도, 파일은 170KB 내외, 제출 대기 1~2초
    · 공개 저장소에는 개인정보·PIN 없음(테스트는 홍길동)
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
 var PW = 595, PH = 841;          // A4 (pt)
-var DPI = 200;                   // 최종 PDF 해상도
+var OV = 4;                      // 입력 글자 오버레이 해상도(1pt=4px ≈ 288dpi)
 var FONT = '"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo","NanumGothic",sans-serif';
 var SIDKEY = 'esign_sid_v3';
 
@@ -59,13 +60,28 @@ function dataUrlToBytes(u) {
 
 /* ---------------- PDF(원본) ---------------- */
 var _pdfDoc = null, _pageImg = {};
+var _bytes = null, _bytesJob = null;   // 원본 PDF 바이트(화면·저장 공용, 1회만 내려받음)
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
+function contractBytes() {
+  if (_bytes) return Promise.resolve(_bytes);
+  if (_bytesJob) return _bytesJob;
+  _bytesJob = fetch(CONTRACT_PDF).then(function (r) {
+    if (!r.ok) throw new Error('contract_fetch');
+    return r.arrayBuffer();
+  }).then(function (b) { _bytes = new Uint8Array(b); return _bytes; })
+    .catch(function (e) { _bytesJob = null; throw e; });
+  return _bytesJob;
+}
 function getPdf() {
   if (_pdfDoc) return Promise.resolve(_pdfDoc);
-  return pdfjsLib.getDocument({ url: CONTRACT_PDF, cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true })
-    .promise.then(function (d) { _pdfDoc = d; return d; });
+  return contractBytes().then(function (bytes) {
+    return pdfjsLib.getDocument({
+      data: bytes.slice(0),
+      cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/', cMapPacked: true
+    }).promise;
+  }).then(function (d) { _pdfDoc = d; return d; });
 }
 function renderPageCanvas(pno, pxWidth) {
   return getPdf().then(function (pdf) {
@@ -213,6 +229,10 @@ function buildRecipientUi() {
     layoutDoc();
     updateBar();
     bindUi();
+    // 관리사가 문서를 읽고 서명하는 동안 최종 PDF 베이스를 미리 만들어 둔다(제출 대기 최소화)
+    var warm = function () { prepareOut().catch(function () { }); };
+    if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 2500 });
+    else setTimeout(warm, 800);
   }).catch(function () {
     var l = $('#load');
     if (l) l.innerHTML = '<div class="notice err">원본 계약서를 불러오지 못했습니다. 새로고침해 주세요.</div>';
@@ -517,7 +537,9 @@ function showLoading(text, sub) {
 function hideLoading() { var l = $('#load'); if (l) l.remove(); }
 
 function doSubmit() {
-  showLoading('계약서를 만들고 있어요', '잠시만 기다려 주세요 (10초 정도 걸립니다)');
+  if (_submitting) return;
+  _submitting = true;
+  showLoading('계약서를 저장하고 있어요', '2~3초면 끝납니다. 창을 닫지 말아 주세요');
   buildFinalPdf().then(function (b64) {
     return api({
       action: 'submit', token: CT.token,
@@ -525,15 +547,15 @@ function doSubmit() {
       pdf: b64, ua: navigator.userAgent
     });
   }).then(function (r) {
-    hideLoading();
+    hideLoading(); _submitting = false;
     if (!r || !r.ok) {
-      toast('제출에 실패했습니다: ' + ((r && r.error) || '오류'));
+      toast(r && r.error === 'already_done' ? '이미 저장된 계약서입니다' : '제출에 실패했습니다. 다시 시도해 주세요');
       return;
     }
     CT.status = '완료'; CT.done = r.doneAt || '';
     showDone(r);
   }).catch(function (e) {
-    hideLoading();
+    hideLoading(); _submitting = false;
     toast('제출 중 오류가 발생했습니다. 다시 시도해 주세요.');
     console.error(e);
   });
@@ -556,68 +578,103 @@ function showDone(r) {
     '문의: 가온누리 산후도우미 담당자</p></div></div></div>'));
 }
 
-/* ---------------- 최종 PDF 생성(화면과 동일) ---------------- */
-function drawCheckMark(ctx, x, y, w, h) {
-  x = x + w * 0.02; y = y + h * 0.20; w = w * 0.56; h = h * 0.62;
-  ctx.save();
-  ctx.strokeStyle = '#0f5fa8';
-  ctx.lineWidth = Math.max(1.4, w * 0.13);
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.20, y + h * 0.50);
-  ctx.lineTo(x + w * 0.43, y + h * 0.75);
-  ctx.lineTo(x + w * 0.84, y + h * 0.24);
-  ctx.stroke();
-  ctx.restore();
+/* ---------------- 최종 PDF: 원본 페이지(벡터) 복사 + 입력·체크·서명만 얹기 --------------
+   · contract.pdf의 4쪽을 pdf-lib copyPages로 그대로 복사 → 본문 글자는 100% 벡터(원본과 동일)
+   · 입력 글자는 칸 크기만큼만 작은 투명 PNG(1pt=4px)로, 체크는 벡터선, 서명은 서명 PNG로 얹음
+   · 문서를 읽는 동안 4쪽 베이스 + 입력 글자까지 미리 만들어 두어 제출 클릭 후 대기가 거의 없음
+   ------------------------------------------------------------------------------------ */
+var _outDoc = null, _outJob = null, _submitting = false;
+
+function textOverlayCanvas(f, v) {
+  var k = OV;
+  var cv = document.createElement('canvas');
+  cv.width = Math.max(2, Math.round(f.w * k));
+  cv.height = Math.max(2, Math.round(f.h * k));
+  var ctx = cv.getContext('2d');
+  var size = fitFont(v, f.w, f.h) * k;
+  ctx.font = '500 ' + size.toFixed(2) + 'px ' + FONT;
+  ctx.fillStyle = '#111';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(v, f.w * 0.02 * k, f.h * 0.53 * k, f.w * 0.97 * k);
+  return cv;
 }
-function drawImageFit(ctx, img, x, y, w, h, padRatio) {
-  var pad = Math.min(w, h) * (padRatio == null ? 0.06 : padRatio);
-  var bw = w - pad * 2, bh = h - pad * 2;
+function prepareOut() {                      // 서명 전에 미리 만들어 두는 기본 문서
+  if (_outDoc) return Promise.resolve(_outDoc);
+  if (_outJob) return _outJob;
+  _outJob = contractBytes().then(function (bytes) {
+    return PDFLib.PDFDocument.load(bytes.slice(0));
+  }).then(function (src) {
+    return PDFLib.PDFDocument.create().then(function (out) {
+      return out.copyPages(src, PAGES.map(function (p) { return p - 1; })).then(function (copied) {
+        copied.forEach(function (p) { out.addPage(p); });
+        var chain = Promise.resolve();
+        copied.forEach(function (page, i) {
+          FIELDS.filter(function (f) { return f.p === PAGES[i]; }).forEach(function (f) {
+            if (f.t !== 'text') return;
+            var v = valOf(f, CT);
+            if (!v) return;
+            var cv = textOverlayCanvas(f, v);
+            chain = chain.then(function () {
+              return out.embedPng(cv.toDataURL('image/png')).then(function (emb) {
+                page.drawImage(emb, { x: f.x, y: PH - f.y - f.h, width: f.w, height: f.h });
+              });
+            });
+          });
+        });
+        return chain.then(function () { _outDoc = out; _outJob = null; return out; });
+      });
+    });
+  }).catch(function (e) { _outJob = null; throw e; });
+  return _outJob;
+}
+function drawCheckVector(page, f) {
+  var x = f.x + f.w * 0.02, y = f.y + f.h * 0.20, w = f.w * 0.56, h = f.h * 0.62;
+  var lw = Math.max(1.4, w * 0.13);
+  var color = PDFLib.rgb(15 / 255, 95 / 255, 168 / 255);
+  var pts = [
+    { x: x + w * 0.20, y: y + h * 0.50 },
+    { x: x + w * 0.43, y: y + h * 0.75 },
+    { x: x + w * 0.84, y: y + h * 0.24 }
+  ];
+  for (var i = 0; i < 2; i++) {
+    page.drawLine({
+      start: { x: pts[i].x, y: PH - pts[i].y },
+      end: { x: pts[i + 1].x, y: PH - pts[i + 1].y },
+      thickness: lw, color: color, lineCap: PDFLib.LineCapStyle.Round
+    });
+  }
+}
+function drawSignImage(page, img, f) {
+  var pad = Math.min(f.w, f.h) * 0.02;
+  var bw = f.w - pad * 2, bh = f.h - pad * 2;
   var ar = (img.width || 1) / (img.height || 1);
   var dw = bw, dh = bw / ar;
   if (dh > bh) { dh = bh; dw = bh * ar; }
-  ctx.drawImage(img, x + pad + (bw - dw) / 2, y + pad + (bh - dh) / 2, dw, dh);
-}
-function loadImg(src) {
-  return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = src; });
+  var dx = f.x + pad + (bw - dw) / 2;
+  var dy = f.y + pad + (bh - dh) / 2;
+  page.drawImage(img, { x: dx, y: PH - (dy + dh), width: dw, height: dh });
 }
 function buildFinalPdf() {
-  var imgs = {};
-  var jobs = Object.keys(S.signs).map(function (id) {
-    return loadImg(S.signs[id]).then(function (i) { imgs[id] = i; });
-  });
-  return Promise.all(jobs).then(function () {
-    return PDFLib.PDFDocument.create();
-  }).then(function (out) {
-    var chain = Promise.resolve();
-    PAGES.forEach(function (pno) {
-      chain = chain.then(function () {
-        return renderPageCanvas(pno, Math.round(PW * DPI / 72)).then(function (cv) {
-          var ctx = cv.getContext('2d'), k = cv.width / PW;
-          FIELDS.filter(function (f) { return f.p === pno; }).forEach(function (f) {
-            var x = f.x * k, y = f.y * k, w = f.w * k, h = f.h * k;
-            if (f.t === 'text') {
-              var v = valOf(f, CT); if (!v) return;
-              var size = fitFont(v, f.w, f.h) * k;
-              ctx.font = '500 ' + size.toFixed(2) + 'px ' + FONT;
-              ctx.fillStyle = '#111';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(v, x + w * 0.02, y + h * 0.53, w * 0.97);
-            } else if (f.t === 'check') {
-              if (S.checks[f.id]) drawCheckMark(ctx, x, y, w, h);
-            } else if (f.t === 'sign') {
-              if (imgs[f.id]) drawImageFit(ctx, imgs[f.id], x, y, w, h, 0.02);
-            }
-          });
-          var jpg = cv.toDataURL('image/jpeg', 0.93);
-          return out.embedJpg(dataUrlToBytes(jpg)).then(function (emb) {
-            var p = out.addPage([PW, PH]);
-            p.drawImage(emb, { x: 0, y: 0, width: PW, height: PH });
-          });
+  return prepareOut().then(function (out) {
+    var uniq = [];
+    Object.keys(S.signs).forEach(function (id) {
+      var v = S.signs[id];
+      if (v && uniq.indexOf(v) < 0) uniq.push(v);   // 같은 서명은 한 번만 심는다
+    });
+    return Promise.all(uniq.map(function (src) { return out.embedPng(src); })).then(function (embs) {
+      var embOf = {};
+      uniq.forEach(function (src, i) { embOf[src] = embs[i]; });
+      out.getPages().forEach(function (page, i) {
+        FIELDS.filter(function (f) { return f.p === PAGES[i]; }).forEach(function (f) {
+          if (f.t === 'check') { if (S.checks[f.id]) drawCheckVector(page, f); }
+          else if (f.t === 'sign') { if (embOf[S.signs[f.id]]) drawSignImage(page, embOf[S.signs[f.id]], f); }
         });
       });
+      return out.saveAsBase64();
     });
-    return chain.then(function () { return out.saveAsBase64(); });
+  }).catch(function (e) {
+    _outDoc = null; _outJob = null;      // 실패하면 다음 시도에서 새로 만든다
+    throw e;
   });
 }
 
