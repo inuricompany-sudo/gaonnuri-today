@@ -1048,8 +1048,8 @@ function renderCreate() {
       '<div class="formrow"><label>이용자(산모) 성명</label><input id="x_name" placeholder="예: 윤슬기"></div></div>' +
       '<div class="g2"><div class="formrow"><label>연락처</label><input id="x_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
       '<div class="formrow"><label>제공인력(관리사)</label><input id="x_worker" placeholder="예: 김용미"></div></div>' +
-      '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" type="date"></div>' +
-      '<div class="formrow"><label>서비스 종료일</label><input id="x_end" type="date"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" inputmode="numeric" placeholder="YYYY-MM-DD"></div>' +
+      '<div class="formrow"><label>서비스 종료일</label><input id="x_end" inputmode="numeric" placeholder="YYYY-MM-DD"></div></div>' +
       '<div class="g2"><div class="formrow"><label>이용유형(바우처)</label><input id="x_voucher" placeholder="예: A통합1"></div>' +
       '<div class="formrow"><label>서비스기간(일수)</label><input id="x_term" placeholder="예: 20일"></div></div>' +
       '<div class="g2"><div class="formrow"><label>기존 제공기간</label><input id="x_beforePeriod" placeholder="시작일·종료일 입력 시 자동"></div>' +
@@ -1057,7 +1057,7 @@ function renderCreate() {
       '<div class="g2"><div class="formrow"><label>기존 제공인력</label><input id="x_beforeWorker" placeholder="자동"></div>' +
       '<div class="formrow"><label>변경 제공인력</label><input id="x_afterWorker" placeholder="자동">' +
       '<label class="mini"><input type="checkbox" id="x_same"> 변동없음</label></div></div>' +
-      '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" type="date"></div>' +
+      '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" inputmode="numeric" placeholder="YYYY-MM-DD"></div>' +
       '<div class="formrow"><label>메모(선택)</label><input id="x_memo" placeholder=""></div></div>' +
     '</div>' +
     '<div style="margin-top:16px"><button class="btn" id="c_ok">링크 만들기</button></div>' +
