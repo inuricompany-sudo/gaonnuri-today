@@ -147,6 +147,7 @@ function showAlreadyDone() {
   var parts = String(CT.done || '').split(' ');
   app.innerHTML = '';
   app.appendChild(el(
+    '<div>' +
     '<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
     '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
@@ -156,7 +157,7 @@ function showAlreadyDone() {
     '<p class="muted" style="margin:6px 0 0">' + esc(parts[0] || '') + ' ' + esc(parts[1] || '') + ' 완료</p>' +
     '</div>' +
     summaryCard() +
-    '<p class="muted small" style="text-align:center">문의: 가온누리 산후도우미 담당자</p></div>'));
+    '<p class="muted small" style="text-align:center">문의: 가온누리 산후도우미 담당자</p></div></div>'));
 }
 function summaryCard() {
   return '<div class="card"><h2>계약 내용</h2>' +
@@ -457,9 +458,10 @@ function doSubmit() {
 
 function showDone(r) {
   app.innerHTML = '';
-  app.appendChild(el('<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
-    '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>'));
-  app.appendChild(el('<div class="wrap">' +
+  app.appendChild(el('<div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">관리사님 계약서식</div>' +
+    '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
+    '<div class="wrap">'
     '<div class="card" style="text-align:center;padding:28px 16px">' +
     '<div style="font-size:40px;line-height:1">✅</div>' +
     '<h2 style="margin-top:10px">서명이 완료되었습니다</h2>' +
@@ -468,7 +470,7 @@ function showDone(r) {
     summaryCard() +
     '<div class="card"><h2>안내</h2><p class="muted small" style="margin:0">' +
     '서명하신 계약서는 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
-    '문의: 가온누리 산후도우미 담당자</p></div></div>'));
+    '문의: 가온누리 산후도우미 담당자</p></div></div></div>'));
 }
 
 /* ---------------- 최종 PDF 생성(화면과 동일) ---------------- */
