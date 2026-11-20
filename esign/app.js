@@ -469,7 +469,7 @@ function layoutDoc() {
   });
 }
 function layoutRadio(f, n, k) {
-  var size = Math.max(16, Math.min(24, f.bw * k * 2.4));
+  var size = Math.min(20, Math.max(7, f.bw * k * 1.35));
   var cx = (f.bx + f.bw / 2 - f.x) * k;
   var rowH = Math.max(f.gap * k * 1.7, 20);
   Array.prototype.forEach.call(n.children, function (o, i) {
