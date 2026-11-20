@@ -482,6 +482,7 @@ function showDone(r) {
 
 /* ---------------- 최종 PDF 생성(화면과 동일) ---------------- */
 function drawCheckMark(ctx, x, y, w, h) {
+  x = x + w * 0.04; y = y + h * 0.22; w = w * 0.58; h = h * 0.64;
   ctx.save();
   ctx.strokeStyle = '#0f5fa8';
   ctx.lineWidth = Math.max(1.4, w * 0.13);
