@@ -257,7 +257,6 @@ function showConsent() {
     '<button class="more" id="cmore">[자세히 보기]</button>' +
     '<div class="crow"><button class="btn gray" id="cgo" disabled>계속</button></div>' +
     '</div></div>' +
-    '<div class="peek">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '님 계약서</div>' +
     '</div>');
   document.body.appendChild(ov);
   var ck = $('#ckin', ov), go = $('#cgo', ov);
