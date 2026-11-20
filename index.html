@@ -56,8 +56,10 @@
       border:1.5px solid #c8cec7;background:#fff;color:transparent;font-size:13px;font-weight:700}
     .chk input:checked + .mark{background:#2e7d32;border-color:#2e7d32;color:#fff}
     .chk input:disabled + .mark{opacity:.55}
-    /* v20: 보기 전용 — 체크된 ☑/☐ 모양은 그대로 보이고, 누르면 안내만 뜹니다. */
+    /* v20: 보기 전용 — 체크된 ☑/☐ 모양은 그대로 보이고, 누르면 안내만 뜹니다.
+       input 은 disabled 라서 상태가 바뀌지 않고, 탭은 아래 .mark 가 받아 안내를 띄웁니다. */
     .chk.ro{cursor:default}
+    .chk.ro input{pointer-events:none}
     .chk.ro input:disabled + .mark{opacity:1}
     /* v16: '일반' 신청 산모 — 처음부터 완료(☑) 상태로 고정 */
     .chk.fixed{cursor:default}
