@@ -595,10 +595,8 @@ function showPin() {
       busy = false;
       if (r.ok) {
         SID = r.sid; sessionStorage.setItem(SIDKEY, SID);
-        return api({ action: 'list', sid: SID }).then(function (l) {
-          if (l && l.ok) return renderDash(l.list);
-          msg('목록을 불러오지 못했습니다'); busy = false;
-        });
+        busy = false;
+        return renderDash(r.list || []);
       }
       buf = ''; paint();
       if (r.error === 'locked') msg('5회 오입력으로 10분간 잠겼습니다');
