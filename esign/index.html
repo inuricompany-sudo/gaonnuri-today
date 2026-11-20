@@ -561,7 +561,7 @@ function openDetail(token){
       +   '<tr><th>요청 생성</th><td>'+esc(c.created||'-')+'</td></tr>'
       +   '<tr><th>서명 완료</th><td>'+esc(c.done||'-')+'</td></tr>'
       + '</table>'
-      + (c.signData ? '<h3 style="font-size:14px;margin:16px 0 6px">손글씨 서명</h3><div style="border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fff"><img src="'+c.signData+'" alt="서명" style="width:100%;max-width:340px;display:block;margin:0 auto"></div>' : '<p class="muted" style="margin-top:14px">아직 서명 전입니다.</p>')
+      + (c.signData ? '<h3 style="font-size:14px;margin:16px 0 6px">손글씨 서명</h3><div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fff;text-align:center"><img src="'+c.signData+'" alt="서명" style="max-width:100%;max-height:150px;width:auto"></div>' : '<p class="muted" style="margin-top:14px">아직 서명 전입니다.</p>')
       + (c.pdfUrl ? '<p class="muted" style="margin-top:12px">완료 문서: <a href="'+esc(c.pdfUrl)+'" target="_blank" rel="noopener">드라이브에서 보기</a></p>' : '')
       + '<p class="muted" style="margin-top:12px;font-size:12px">서명 링크: '+esc(location.origin+location.pathname+'?t='+c.token)+'</p>'
       + '</div></div>');
