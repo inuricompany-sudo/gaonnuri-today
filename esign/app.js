@@ -326,7 +326,9 @@ function openSignPad(f) {
     '<h3>' + title + '</h3>' +
     '<div class="muted small">아래 칸에 손글씨로 서명해 주세요.</div>' +
     '<div class="padwrap"><canvas></canvas><div class="ph">여기에 서명</div></div>' +
-    '<div class="hintline"><button class="linkbtn" id="clr">다시 쓰기</button><span class="muted small">' + esc(CT.name) + ' 님</span></div>' +
+    '<div class="hintline"><button class="linkbtn" id="clr">다시 쓰기</button>' +
+    (Object.keys(S.signs).length ? '<button class="linkbtn" id="reuse" style="color:var(--brand)">최근 서명 그대로</button>' : '') +
+    '<span class="muted small">' + esc(CT.name) + ' 님</span></div>' +
     '<div class="row2" style="margin-top:10px"><button class="btn gray" id="cancel">취소</button><button class="btn" id="ok">서명 완료</button></div>' +
     '</div></div>');
   document.body.appendChild(sheet);
@@ -364,6 +366,16 @@ function openSignPad(f) {
 
   sheet.querySelector('#clr').addEventListener('click', function () { resize(); drawn = false; ph.style.display = ''; });
   sheet.querySelector('#cancel').addEventListener('click', function () { sheet.remove(); });
+  var reuseBtn = sheet.querySelector('#reuse');
+  if (reuseBtn) reuseBtn.addEventListener('click', function () {
+    var key = Object.keys(S.signs)[0];
+    if (!key) return;
+    S.signs[f.id] = S.signs[key];
+    var node = fieldEls[f.id];
+    node.querySelector('img').src = S.signs[key];
+    node.classList.add('on');
+    sheet.remove(); updateBar();
+  });
   sheet.querySelector('#ok').addEventListener('click', function () {
     if (!drawn) { toast('서명을 먼저 해 주세요'); return; }
     var data = trimCanvas(cv);
@@ -402,6 +414,15 @@ function trimCanvas(cv) {
   out.width = cw; out.height = ch;
   var octx = out.getContext('2d');
   octx.drawImage(cv, minX, minY, cw, ch, 0, 0, cw, ch);
+  // 흰 배경을 투명하게 (문서 위에 잉크만 얹히도록)
+  var im = octx.getImageData(0, 0, cw, ch), d = im.data;
+  for (var p = 0; p < d.length; p += 4) {
+    var a = 255 - Math.min(d[p], d[p + 1], d[p + 2]);
+    if (a < 14) { d[p + 3] = 0; continue; }
+    d[p] = 18; d[p + 1] = 18; d[p + 2] = 22;
+    d[p + 3] = Math.min(255, Math.round(a * 1.35));
+  }
+  octx.putImageData(im, 0, 0);
   return out.toDataURL('image/png');
 }
 
@@ -430,6 +451,16 @@ function openSubmitSheet() {
     '</div></div>');
   document.body.appendChild(sheet);
   sheet.querySelector('#cancel').addEventListener('click', function () { sheet.remove(); });
+  var reuseBtn = sheet.querySelector('#reuse');
+  if (reuseBtn) reuseBtn.addEventListener('click', function () {
+    var key = Object.keys(S.signs)[0];
+    if (!key) return;
+    S.signs[f.id] = S.signs[key];
+    var node = fieldEls[f.id];
+    node.querySelector('img').src = S.signs[key];
+    node.classList.add('on');
+    sheet.remove(); updateBar();
+  });
   sheet.querySelector('#ok').addEventListener('click', function () { sheet.remove(); doSubmit(); });
 }
 
