@@ -129,6 +129,12 @@ function todayStr(){
   var d=new Date(), p=function(n){return (n<10?'0':'')+n;};
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
 }
+function normDate(v){
+  var s = String(v||'').trim();
+  var d = s.replace(/[^0-9]/g,'');
+  if(d.length===8) return d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8);
+  return s;
+}
 function won(s){
   var n = String(s||'').replace(/[^0-9]/g,'');
   return n ? Number(n).toLocaleString('ko-KR')+'원' : (s||'');
@@ -428,8 +434,8 @@ function renderAdminDash(list){
        +  '</div>'
        +  '<label class="field"><span>연락처</span><input type="tel" id="n_phone" placeholder="예) 010-0000-0000"></label>'
        +  '<div class="grid2">'
-       +    '<label class="field"><span>계약 시작일</span><input type="date" id="n_start" value="'+todayStr()+'"></label>'
-       +    '<label class="field"><span>계약 종료일</span><input type="date" id="n_end"></label>'
+       +    '<label class="field"><span>계약 시작일</span><input type="text" id="n_start" inputmode="numeric" placeholder="YYYY-MM-DD" value="'+todayStr()+'"></label>'
+       +    '<label class="field"><span>계약 종료일</span><input type="text" id="n_end" inputmode="numeric" placeholder="YYYY-MM-DD"></label>'
        +  '</div>'
        +  '<label class="field"><span>일급 (원, 세전)</span><input type="text" id="n_rate" inputmode="numeric" value="109800"></label>'
        +  '<div class="btnrow"><button type="button" id="createBtn">링크 만들기</button></div>'
@@ -462,7 +468,7 @@ function renderAdminDash(list){
     api({
       action:'create', sid:SID, branch:document.getElementById('n_branch').value, name:name,
       phone:document.getElementById('n_phone').value.trim(),
-      start:document.getElementById('n_start').value, end:document.getElementById('n_end').value,
+      start:normDate(document.getElementById('n_start').value), end:normDate(document.getElementById('n_end').value),
       rate:document.getElementById('n_rate').value.replace(/[^0-9]/g,''),
       ua: navigator.userAgent
     }).then(function(r){
