@@ -309,6 +309,30 @@ function padEmpty(){
   return true;
 }
 
+function getSignDataUrl(){
+  var cv = document.getElementById('pad');
+  var ctx = cv.getContext('2d');
+  var w = cv.width, h = cv.height;
+  var d = ctx.getImageData(0,0,w,h).data;
+  var minX = w, minY = h, maxX = -1, maxY = -1;
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      if(d[(y*w+x)*4+3] !== 0){
+        if(x<minX) minX=x; if(x>maxX) maxX=x;
+        if(y<minY) minY=y; if(y>maxY) maxY=y;
+      }
+    }
+  }
+  if(maxX < 0) return cv.toDataURL('image/png');
+  var pad = 14;
+  minX = Math.max(0, minX-pad); minY = Math.max(0, minY-pad);
+  maxX = Math.min(w-1, maxX+pad); maxY = Math.min(h-1, maxY+pad);
+  var out = document.createElement('canvas');
+  out.width = maxX-minX+1; out.height = maxY-minY+1;
+  out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+  return out.toDataURL('image/png');
+}
+
 function doSubmit(){
   var msg = document.getElementById('msg');
   var name = document.getElementById('f_name').value.trim();
@@ -335,7 +359,7 @@ function doSubmit(){
   api({
     action:'submit', token:CT.token, name:name, birth:birth, phone:phone, address:addr,
     agree1:a1, agree2:a2, agree3:a3,
-    sign: document.getElementById('pad').toDataURL('image/png'),
+    sign: getSignDataUrl(),
     ua: navigator.userAgent
   }).then(function(r){
     if(r.ok){ CT.status='완료'; CT.done=r.doneAt; CT.name=name; renderDone(r); return; }
@@ -485,7 +509,7 @@ function renderAdminDash(list){
         try{ document.execCommand('copy'); this.textContent='복사됨'; }catch(e){}
         if(navigator.clipboard){ navigator.clipboard.writeText(link).then(function(){},function(){}); }
       });
-      api({action:'list', sid:SID}).then(function(x){ if(x.ok){ LIST = x.list; refreshListOnly(); } });
+      setTimeout(function(){ api({action:'list', sid:SID}).then(function(x){ if(x.ok){ LIST = x.list; refreshListOnly(); } }); }, 1200);
     }).catch(function(){
       btn.disabled = false; btn.textContent = '링크 만들기';
       msg.innerHTML = '<div class="notice err" style="margin:12px 0 0">네트워크 오류입니다.</div>';
