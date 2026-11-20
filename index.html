@@ -436,9 +436,12 @@
     }
     var VIEWER_MSG = '보기 전용이에요. 관리자 비밀번호로 로그인해 주세요.';
 
+    /* v27: '일반' 산모는 바우처 카드체크 대상이 아니므로 총합(total)·완료 수(checked)
+       어디에도 세지 않습니다. (목록에는 그대로 나오고 ☑ 모양도 그대로 보입니다) */
     function updateCount() {
-      var on = document.querySelectorAll('.chk input:checked').length;
-      var all = document.querySelectorAll('.chk input').length;
+      var boxes = document.querySelectorAll('.chk input:not([data-normal])');
+      var all = boxes.length, on = 0;
+      for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) on++;
       document.getElementById('count').textContent = '카드체크 ' + on + '/' + all;
     }
 
@@ -559,7 +562,8 @@
       var title = ro ? ' title="보기 전용 — 관리자만 바꿀 수 있어요"'
         : (fixed ? ' title="일반 산모 · 카드체크 대상 아님"' : '');
       return '<label class="chk' + (fixed ? ' fixed' : '') + (ro ? ' ro' : '') + '"' + title + '>' +
-        '<input type="checkbox" data-idx="' + idx + '"' + (it.checked ? ' checked' : '') + (ro ? ' disabled' : '') + '>' +
+        '<input type="checkbox" data-idx="' + idx + '"' + (fixed ? ' data-normal="1"' : '') +
+          (it.checked ? ' checked' : '') + (ro ? ' disabled' : '') + '>' +
         '<span class="mark">✓</span>' +
       '</label>';
     }
