@@ -553,17 +553,25 @@ function layoutDoc() {
   });
 }
 function layoutRadio(f, n, k) {
-  var size = Math.min(20, Math.max(5, f.bw * k * 0.98));
-  var cx = (f.bx + f.bw / 2 - f.x) * k;
-  var rowH = Math.max(f.gap * k * 1.7, 20);
+  /* f.bx/bw/bh = 원본 PDF의 □ 네모 칸, f.rows[i] = 그 칸의 세로 중심 */
+  var wpx = f.bw * k, hpx = f.bh * k;
+  var left = (f.bx - f.x) * k;
+  var pitch = 1e9;
+  for (var i = 1; i < f.rows.length; i++) {
+    var d = Math.abs(f.rows[i] - f.rows[i - 1]);
+    if (d > 0 && d < pitch) pitch = d;
+  }
+  if (!isFinite(pitch) || pitch === 1e9) pitch = f.gap || 16;
+  // 한 줄 높이가 옆 줄 간격을 넘으면 위 줄 선택을 가로채므로 간격 안으로 제한
+  var rowH = pitch * k * 0.96;
   Array.prototype.forEach.call(n.children, function (o, i) {
     var cy = (f.rows[i] - f.y) * k;
     o.style.top = (cy - rowH / 2).toFixed(2) + 'px';
     o.style.height = rowH.toFixed(2) + 'px';
     var box = o.querySelector('.box');
-    box.style.width = size + 'px';
-    box.style.height = size + 'px';
-    box.style.left = (cx + (f.bw * k) / 2 - size).toFixed(1) + 'px';
+    box.style.width = wpx.toFixed(2) + 'px';
+    box.style.height = hpx.toFixed(2) + 'px';
+    box.style.left = left.toFixed(2) + 'px';
   });
 }
 function layoutArea(f, n) {
@@ -1042,8 +1050,8 @@ function drawSignImage(page, img, f) {
   var dy = f.y + pad + (bh - dh) / 2;
   page.drawImage(img, { x: dx, y: PH - (dy + dh), width: dw, height: dh });
 }
-function drawGlyphCheck(page, f, rowY) {
-  var x = f.bx, y = rowY, w = f.bw, h = f.bh;
+function drawGlyphCheck(page, f, rowY) {   // rowY = 네모 칸의 세로 중심
+  var x = f.bx, y = rowY - f.bh / 2, w = f.bw, h = f.bh;
   var lw = Math.max(1.1, w * 0.16);
   var color = PDFLib.rgb(15 / 255, 95 / 255, 168 / 255);
   var pts = [
@@ -1187,6 +1195,7 @@ function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
    · Admin 키·REST API 키·Client Secret은 이 파일에 넣지 않습니다. */
 var KAKAO_JS_KEY = 'd9c778f46f68a0f4e86b5b5e88b5a859';
 var KAKAO_IMG = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png';
+var KAKAO_IMG_CLOSE = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og_close.png';   // 종료안내문 전용 배너
 function shareUrlOf(c) { return certLink(c); }
 function duoLinkOf(a, b) {
   return location.origin + location.pathname + '?t=' + encodeURIComponent(a) + '&t2=' + encodeURIComponent(b);
@@ -1214,7 +1223,7 @@ function kakaoBannerPayload(c) {
       title: '[가온누리산후도우미] 검토할 문서가 도착했습니다',
       description: '[' + typeLabel + (branch ? ' · ' + branch : '') + '] ' +
         who + ', 문서를 확인하고 전자서명을 진행해 주세요.',
-      imageUrl: KAKAO_IMG,
+      imageUrl: isCloseType(c) ? KAKAO_IMG_CLOSE : KAKAO_IMG,
       imageWidth: 1200,
       imageHeight: 630,
       link: { mobileWebUrl: link, webUrl: link }
