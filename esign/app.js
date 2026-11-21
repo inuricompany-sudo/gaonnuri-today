@@ -1146,15 +1146,18 @@ function buildDocPages(prev) {
     return PDFLib.PDFDocument.load(bytes.slice(0));
   }).then(function (src) {
     return PDFLib.PDFDocument.create().then(function (out) {
-      var jobs = PAGES.map(function (p) {
-        var ri = (prev && p === 1) ? prev.pages.indexOf(1) : -1;
-        if (ri >= 0) return prev.doc.copyPages(out, [ri]);
-        return src.copyPages(out, [p - 1]);
+      var chain = Promise.resolve();
+      PAGES.forEach(function (p) {                 // 한 쪽씩 순서대로 복사(pdf-lib 동시 복사 불가)
+        chain = chain.then(function () {
+          var ri = (prev && p === 1) ? prev.pages.indexOf(1) : -1;
+          var from = ri >= 0 ? prev.doc : src;
+          var idx = ri >= 0 ? ri : p - 1;
+          return from.copyPages(out, [idx]).then(function (list) {
+            if (list && list[0]) out.addPage(list[0]);
+          });
+        });
       });
-      return Promise.all(jobs).then(function (lists) {
-        lists.forEach(function (l) { if (l && l[0]) out.addPage(l[0]); });
-        return out;
-      });
+      return chain.then(function () { return out; });
     });
   });
 }
