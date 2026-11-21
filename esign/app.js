@@ -1147,12 +1147,12 @@ function buildDocPages(prev) {
   }).then(function (src) {
     return PDFLib.PDFDocument.create().then(function (out) {
       var chain = Promise.resolve();
-      PAGES.forEach(function (p) {                 // 한 쪽씩 순서대로 복사(pdf-lib 동시 복사 불가)
+      PAGES.forEach(function (p) {                 // pdf-lib: 대상문서.copyPages(원본문서, [쪽]) — 한 쪽씩
         chain = chain.then(function () {
           var ri = (prev && p === 1) ? prev.pages.indexOf(1) : -1;
           var from = ri >= 0 ? prev.doc : src;
           var idx = ri >= 0 ? ri : p - 1;
-          return from.copyPages(out, [idx]).then(function (list) {
+          return out.copyPages(from, [idx]).then(function (list) {
             if (list && list[0]) out.addPage(list[0]);
           });
         });
