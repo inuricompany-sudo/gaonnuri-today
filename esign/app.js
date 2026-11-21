@@ -944,6 +944,48 @@ function buildFinalPdf() {
 /* ---------------- 관리자 ---------------- */
 var SID = sessionStorage.getItem(SIDKEY) || '';
 function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
+
+/* ---------------- 카톡 배너(클릭 카드) 공유 ----------------
+   · JavaScript 키는 카카오 JS SDK용 공개 키입니다(등록한 도메인에서만 동작).
+   · Admin 키·REST API 키·Client Secret은 이 파일에 넣지 않습니다. */
+var KAKAO_JS_KEY = 'd9c778f46f68a0f4e86b5b5e88b5a859';
+var KAKAO_IMG = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png';
+function shareUrlOf(c) { return location.origin + location.pathname + '?t=' + encodeURIComponent((c && c.token) || ''); }
+function kakaoInit() {
+  try {
+    if (!window.Kakao || !Kakao.init) return false;
+    if (!Kakao.isInitialized()) Kakao.init(KAKAO_JS_KEY);
+    return Kakao.isInitialized();
+  } catch (e) { return false; }
+}
+function kakaoBannerPayload(c) {
+  var link = shareUrlOf(c);
+  var typeLabel = isCloseType(c) ? '서비스 종료안내문' : (c.type || '관리사님 계약서식');
+  var branch = c.branch ? c.branch + '지사' : '';
+  var who = c.name ? c.name + '님' : '수신자';
+  return {
+    objectType: 'feed',
+    content: {
+      title: '[가온누리산후도우미] 검토할 문서가 도착했습니다',
+      description: '[' + typeLabel + (branch ? ' · ' + branch : '') + '] ' +
+        who + ', 문서를 확인하고 전자서명을 진행해 주세요.',
+      imageUrl: KAKAO_IMG,
+      imageWidth: 1200,
+      imageHeight: 630,
+      link: { mobileWebUrl: link, webUrl: link }
+    },
+    buttons: [{ title: '문서 검토 및 작성', link: { mobileWebUrl: link, webUrl: link } }]
+  };
+}
+function sendKakaoBanner(c) {
+  if (!c || !c.token) { toast('보낼 문서를 찾지 못했습니다'); return; }
+  if (!kakaoInit()) { toast('카카오 공유를 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.'); return; }
+  try {
+    Kakao.Share.sendDefault(kakaoBannerPayload(c));
+  } catch (e) {
+    toast('카톡 공유를 열지 못했습니다: ' + ((e && (e.message || e)) || ''));
+  }
+}
 function showAdmin() {
   if (SID) { api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); else { SID = ''; sessionStorage.removeItem(SIDKEY); showPin(); } }); }
   else showPin();
@@ -1010,19 +1052,35 @@ function renderDash(list) {
   var html = '<div class="wrap" style="padding-bottom:30px">' +
     '<div class="muted small" style="margin:0 0 8px 2px">대기 ' + wait + ' · 완료 ' + (list.length - wait) + ' · 전체 ' + list.length + '</div>';
   if (!list.length) html += '<div class="card"><div class="muted">아직 만든 계약이 없습니다. [+ 새 계약]으로 링크를 만들어 주세요.</div></div>';
+  var byToken = {};
+  list.forEach(function (c) { byToken[c.token] = c; });
   html += '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden">';
   list.forEach(function (c) {
-    html += '<div class="list-item" data-token="' + esc(c.token) + '">' +
+    html += '<div class="list-row">' +
+      '<div class="list-item" data-token="' + esc(c.token) + '">' +
       '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') + ' <span class="chip br">' + esc(c.branch) + '</span>' +
       (isCloseType(c) ? ' <span class="chip close">종료안내문</span>' : '') + '</div>' +
       '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
       '<div class="r"><span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span>' +
-      '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>';
+      '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
+      '<div class="li-acts">' +
+      '<button class="btn kakao" data-share="' + esc(c.token) + '">카톡 배너 보내기</button>' +
+      '<button class="btn gray" data-copy="' + esc(c.token) + '">링크만 복사</button>' +
+      '</div></div>';
   });
   html += '</div></div>';
   wrap.innerHTML = html;
   wrap.querySelectorAll('.list-item').forEach(function (n) {
     n.addEventListener('click', function () { openDetail(n.getAttribute('data-token')); });
+  });
+  wrap.querySelectorAll('[data-share]').forEach(function (b) {
+    b.addEventListener('click', function () { sendKakaoBanner(byToken[b.getAttribute('data-share')]); });
+  });
+  wrap.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      copyText(location.origin + location.pathname + '?t=' + b.getAttribute('data-copy'))
+        .then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다.'); });
+    });
   });
 }
 function renderCreate() {
@@ -1166,13 +1224,15 @@ function renderCreate() {
       box.innerHTML = '<div class="muted small" style="margin-bottom:6px">' +
         (close ? '종료안내문 링크가 만들어졌습니다. 산모님께 링크를 보내 주세요.' : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.') + '</div>' +
         '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
-        '<div class="copybtns"><button class="btn gray" id="c_copy">링크 복사</button>' +
+        '<div class="copybtns wrapbtns"><button class="btn kakao" id="c_kakao">카톡 배너 보내기</button>' +
+        '<button class="btn gray" id="c_copy">링크만 복사</button>' +
         '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
       box.querySelector('#c_copy').addEventListener('click', function () {
         var i = box.querySelector('#c_link'); i.select(); i.setSelectionRange(0, 999);
         copyText(link).then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다. 길게 눌러 복사해 주세요.'); });
       });
       box.querySelector('#c_text').addEventListener('click', function () { copyGuide(item); });
+      box.querySelector('#c_kakao').addEventListener('click', function () { sendKakaoBanner(item); });
     }).catch(function () { var btn = $('#c_ok'); if (btn) btn.disabled = false; toast('네트워크 오류'); });
   });
 }
@@ -1232,7 +1292,8 @@ function openDetail(token) {
       '<div class="kv"><span class="k">생성</span><span class="v">' + esc(c.created || '-') + '</span></div>' +
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
-      '<div class="copybtns"><button class="btn gray" id="d_link">링크 복사</button>' +
+      '<div class="copybtns wrapbtns"><button class="btn kakao" id="d_kakao">카톡 배너 보내기</button>' +
+      '<button class="btn gray" id="d_link">링크만 복사</button>' +
       (c.status === '완료' ? '' : '<button class="btn" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
       '<div id="d_sigs" style="margin-top:12px"></div>' +
       '<div style="margin-top:14px"><button class="btn" id="d_pdf">최종 PDF 보기</button></div>' +
@@ -1247,6 +1308,7 @@ function openDetail(token) {
     });
     var dtext = sheet.querySelector('#d_text');
     if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
+    sheet.querySelector('#d_kakao').addEventListener('click', function () { sendKakaoBanner(c); });
     if (c.signs) {
       var h = '<div class="muted small" style="margin-bottom:6px">서명</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
       Object.keys(c.signs).forEach(function (id) {
