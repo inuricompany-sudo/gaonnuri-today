@@ -391,6 +391,13 @@ function buildRecipientUi() {
     '<div class="zoom"><button data-z="1" class="on">맞춤</button><button data-z="1.5">확대</button><button data-z="2.1">크게</button></div>' +
     '</header>');
   app.appendChild(top);
+  if (DUO) {
+    app.appendChild(el('<div class="duonote">' +
+      (STEP === 1
+        ? '<b>계룡·논산 지사 계약서가 함께 작성됩니다.</b> 공통 1쪽(개인정보 동의·서명)은 한 번만 작성하면 두 계약서에 똑같이 반영됩니다. 서명은 1회만 해 주세요.'
+        : '<b>논산지사 계약서(2단계)</b>입니다. 1쪽은 1단계에서 작성한 내용이 그대로 반영되었습니다. 논산에서 다른 부분만 확인·체크해 주세요.') +
+      '</div>'));
+  }
 
   var wrap = el('<div class="docwrap" id="docwrap"><div class="pages" id="pages"></div></div>');
   app.appendChild(wrap);
@@ -617,16 +624,22 @@ function goStep2() {
   if (_submitting) return;
   _submitting = true;
   showLoading('1단계 계룡 계약서를 준비하고 있어요', '이어서 논산 계약서가 열립니다. 창을 닫지 말아 주세요');
-  var aState = pickState(CT, S), aConsent = CONSENT_AT, aCT = CT;
-  buildFinalPdf().then(function (b64) {
-    _stepA = { token: aCT.token, pdf: b64, st: aState, consentAt: aConsent, branch: aCT.branch };
-    var d = DUO.docs[1];
-    STEP = 2;
-    applyDoc(d);
-    hideLoading(); _submitting = false;
-    buildRecipientUi();
-    window.scrollTo(0, 0);
-    toast('계룡 계약서 완료 · 논산 계약서 서명란에 서명이 적용되었습니다');
+  var aState = pickState(CT, S), aConsent = CONSENT_AT, aCT = CT, aPages = PAGES.slice(0);
+  var t0 = Date.now();
+  buildFirstDuoPdf().then(function (outA) {
+    return outA.saveAsBase64().then(function (b64) {
+      _stepA = {
+        token: aCT.token, pdf: b64, st: aState, consentAt: aConsent, branch: aCT.branch,
+        doc: outA, pages: aPages, ms: Date.now() - t0
+      };
+      var d = DUO.docs[1];
+      STEP = 2;
+      applyDoc(d);
+      hideLoading(); _submitting = false;
+      buildRecipientUi();
+      window.scrollTo(0, 0);
+      toast('계룡 계약서 완료 · 논산은 다른 부분만 확인하고 서명 없이 제출하면 됩니다');
+    });
   }).catch(function (e) {
     hideLoading(); _submitting = false;
     toast('1단계 계약서를 준비하지 못했습니다. 다시 시도해 주세요');
@@ -844,28 +857,40 @@ function doSubmit() {
   _submitting = true;
   var curCT = CT, curState = pickState(CT, S), curConsent = CONSENT_AT;
   showLoading(DUO ? '계룡·논산 문서를 저장하고 있어요' : '문서를 저장하고 있어요',
-    DUO ? '2건을 차례로 저장합니다. 5~10초 걸립니다. 창을 닫지 말아 주세요' : '3~5초면 끝납니다. 창을 닫지 말아 주세요');
-  buildFinalPdf().then(function (b64) {
+    DUO ? '서명 1장으로 2건을 서버에 저장합니다. 5~10초 걸립니다. 창을 닫지 말아 주세요' : '3~5초면 끝납니다. 창을 닫지 말아 주세요');
+  var tStart = Date.now(), tBuild = 0;
+  var builder = (DUO && _stepA && _stepA.doc) ? buildSecondPdf(_stepA.doc) : buildFinalPdf();
+  builder.then(function (b64) {
+    tBuild = Date.now() - tStart;
     var jobs = [];
     if (DUO && _stepA) jobs.push({ token: _stepA.token, pdf: _stepA.pdf, st: _stepA.st, consentAt: _stepA.consentAt, branch: _stepA.branch });
     jobs.push({ token: curCT.token, pdf: b64, st: curState, consentAt: curConsent, branch: curCT.branch });
     var results = [], chain = Promise.resolve();
     jobs.forEach(function (j) {
       chain = chain.then(function () {
+        var t1 = Date.now();
         return api({
           action: 'submit', token: j.token,
           checks: j.st.checks, signs: j.st.signs, opts: j.st.opts, texts: j.st.texts,
           consentAt: j.consentAt, pdf: j.pdf, ua: navigator.userAgent
         }).then(function (r) {
-          results.push({ branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '' });
+          results.push({ branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '', ms: Date.now() - t1 });
         }).catch(function () {
-          results.push({ branch: j.branch, ok: false, doneAt: '', error: 'network' });
+          results.push({ branch: j.branch, ok: false, doneAt: '', error: 'network', ms: Date.now() - t1 });
         });
       });
     });
     return chain.then(function () { return results; });
   }).then(function (results) {
     hideLoading(); _submitting = false;
+    try {
+      window.__duoTiming = {
+        aBuild: (_stepA && _stepA.ms) || 0, bBuild: tBuild,
+        uploads: results.map(function (x) { return { branch: x.branch, ms: x.ms, ok: x.ok }; }),
+        total: Date.now() - tStart, duo: !!DUO
+      };
+      console.log('[esign] 저장 시간', window.__duoTiming);
+    } catch (e) { }
     var bad = results.filter(function (x) { return !x.ok; });
     if (!bad.length) {
       CT.status = '완료'; CT.done = results[results.length - 1].doneAt || '';
@@ -1054,8 +1079,25 @@ function areaOverlayCanvas(f, text) {
   }
   return cv;
 }
-function buildFinalPdf() {
-  return prepareOut().then(function (out) {
+function drawOverlays(out, skipText, skipPageNo) {      // 한 문서(page 순서 = PAGES)에 입력·체크·서명을 얹기
+  var pages = out.getPages();
+  var chain = Promise.resolve();
+  if (!skipText) {
+    pages.forEach(function (page, i) {
+      if (PAGES[i] === skipPageNo) return;
+      FIELDS.filter(function (f) { return f.p === PAGES[i] && f.t === 'text'; }).forEach(function (f) {
+        var v = valOf(f, CT);
+        if (!v) return;
+        var cv = textOverlayCanvas(f, v);
+        chain = chain.then(function () {
+          return out.embedPng(cv.toDataURL('image/png')).then(function (emb) {
+            page.drawImage(emb, { x: f.x, y: PH - f.y - f.h, width: f.w, height: f.h });
+          });
+        });
+      });
+    });
+  }
+  return chain.then(function () {
     var uniq = [];
     Object.keys(S.signs).forEach(function (id) {
       var v = S.signs[id];
@@ -1070,7 +1112,8 @@ function buildFinalPdf() {
       var embOf = {}, embArea = {};
       uniq.forEach(function (src, i) { embOf[src] = embs[i]; });
       areas.forEach(function (f, i) { embArea[f.id] = embs[uniq.length + i]; });
-      out.getPages().forEach(function (page, i) {
+      pages.forEach(function (page, i) {
+        if (PAGES[i] === skipPageNo) return;       // 공통 1쪽은 앞 문서에서 이미 작성됨
         FIELDS.filter(function (f) { return f.p === PAGES[i]; }).forEach(function (f) {
           if (f.t === 'check') { if (S.checks[f.id]) drawCheckVector(page, f); }
           else if (f.t === 'sign') { if (embOf[S.signs[f.id]]) drawSignImage(page, embOf[S.signs[f.id]], f); }
@@ -1078,11 +1121,45 @@ function buildFinalPdf() {
           else if (f.t === 'area') { if (embArea[f.id]) page.drawImage(embArea[f.id], { x: f.x, y: PH - f.y - f.h, width: f.w, height: f.h }); }
         });
       });
-      return out.saveAsBase64();
     });
+  });
+}
+function buildFinalPdf() {
+  return prepareOut().then(function (out) {
+    return drawOverlays(out, true, 0).then(function () { return out.saveAsBase64(); });
   }).catch(function (e) {
     _outDoc = null; _outJob = null;      // 실패하면 다음 시도에서 새로 만든다
     throw e;
+  });
+}
+/* 두 지사 동시 발송 최적화
+   · 공통 1쪽(개인정보 동의·서명)은 첫 문서 결과에서 그대로 복사 → 다시 그리지 않는다.
+   · 서명 PNG도 문서당 1장만 embed해서 두 장에 동일 적용한다. */
+function buildDocPages(prev) {
+  return contractBytes().then(function (bytes) {
+    return PDFLib.PDFDocument.load(bytes.slice(0));
+  }).then(function (src) {
+    return PDFLib.PDFDocument.create().then(function (out) {
+      var jobs = PAGES.map(function (p) {
+        var ri = (prev && p === 1) ? prev.pages.indexOf(1) : -1;
+        if (ri >= 0) return prev.doc.copyPages(out, [ri]);
+        return src.copyPages(out, [p - 1]);
+      });
+      return Promise.all(jobs).then(function (lists) {
+        lists.forEach(function (l) { if (l && l[0]) out.addPage(l[0]); });
+        return out;
+      });
+    });
+  });
+}
+function buildSecondPdf(prev) {
+  return buildDocPages(prev).then(function (out) {
+    return drawOverlays(out, false, 1).then(function () { return out.saveAsBase64(); });
+  });
+}
+function buildFirstDuoPdf() {          // 1단계: 문서 객체를 남겨 두 번째 PDF에서 1쪽을 재사용
+  return prepareOut().then(function (out) {
+    return drawOverlays(out, true, 0).then(function () { return out; });
   });
 }
 
