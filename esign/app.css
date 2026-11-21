@@ -160,6 +160,7 @@ header.top .t2{font-size:12px; color:var(--sub); white-space:nowrap; overflow:hi
 .chip.wait{background:#fff4e5; color:#a25b00}
 .chip.done{background:var(--brand-soft); color:var(--brand)}
 .chip.br{background:#eef1f4; color:#455}
+.chip.duo{background:#e7f2ee; color:#155646; border:1px solid #cfe3da}
 .list-item{display:flex; align-items:center; gap:10px; padding:12px 14px; background:#fff;
   border-bottom:1px solid var(--line); cursor:pointer}
 .list-item:active{background:#f7f9fa}
@@ -255,8 +256,12 @@ header.top .t2{font-size:12px; color:var(--sub); white-space:nowrap; overflow:hi
 .btn.kakao:active{background:#f2d900}
 .copybtns.wrapbtns{flex-wrap:wrap}
 .copybtns.wrapbtns #c_kakao,.copybtns.wrapbtns #d_kakao{flex:1 1 100%; font-size:14px}
-.list-row{background:#fff}
-.list-row + .list-row{border-top:1px solid var(--line)}
+.list-row{background:#fff}.list-row + .list-row{border-top:1px solid var(--line)}
 .list-row .list-item{border-bottom:0}
 .li-acts{display:flex; gap:8px; padding:0 12px 12px}
 .li-acts .btn{flex:1; padding:9px 8px; font-size:13px; width:auto}
+
+/* ---------- 두 지사 동시 작성 안내 ---------- */
+.duonote{margin:8px 12px 0; padding:10px 12px; background:#e7f2ee; border:1px solid #cfe3da;
+  border-radius:10px; font-size:12.5px; line-height:1.6; color:#155646}
+.duonote b{color:#0f4a3c}
