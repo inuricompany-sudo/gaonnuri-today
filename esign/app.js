@@ -37,6 +37,102 @@ function qs(name) {
   return m ? decodeURIComponent(m[1]) : '';
 }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+/* =============================================================
+   입력 자동 하이픈 (전화번호·날짜·주민등록번호)
+   · 숫자만 입력·붙여넣기 해도 실시간으로 하이픈이 들어간다
+   · 하이픈 뒤에서 백스페이스를 누르면 앞 숫자까지 함께 지운다
+   ============================================================= */
+var MASK_D = /[0-9]/;
+function onlyDigits(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
+
+/* 전화번호: 01020480548 → 010-2048-0548 / 0421234567 → 042-123-4567
+   0212345678 → 02-1234-5678 / 021234567 → 02-123-4567 (숫자 최대 11자리) */
+function fmtPhone(v) {
+  var d = onlyDigits(v).slice(0, 11);
+  if (!d) return '';
+  if (d.slice(0, 2) === '02') {                                   // 서울 02
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return d.slice(0, 2) + '-' + d.slice(2);
+    if (d.length <= 9) return d.slice(0, 2) + '-' + d.slice(2, 5) + '-' + d.slice(5);
+    return d.slice(0, 2) + '-' + d.slice(2, 6) + '-' + d.slice(6);
+  }
+  if (/^050[5-8]/.test(d)) {                                      // 0505·0506·0507·0508 (4자리 국번)
+    if (d.length <= 4) return d;
+    if (d.length <= 7) return d.slice(0, 4) + '-' + d.slice(4);
+    return d.slice(0, 4) + '-' + d.slice(4, 7) + '-' + d.slice(7);
+  }
+  if (d.length <= 3) return d;
+  if (/^01[0-9]/.test(d) || /^07[0-9]/.test(d) || /^06[0-9]/.test(d)) {   // 휴대폰·인터넷전화 3-4-4
+    if (d.length <= 7) return d.slice(0, 3) + '-' + d.slice(3);
+    return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+  }
+  if (d.length <= 6) return d.slice(0, 3) + '-' + d.slice(3);     // 지역번호 3-3-4 (042-123-4567)
+  if (d.length <= 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
+  return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+}
+
+/* 날짜: 20200202 → 2020-02-02 (숫자 최대 8자리) */
+function fmtDate(v) {
+  var d = onlyDigits(v).slice(0, 8);
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return d.slice(0, 4) + '-' + d.slice(4);
+  return d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6);
+}
+
+/* 주민등록번호: 8503301080016 → 850330-1080016 (숫자 최대 13자리) */
+function fmtJumin(v) {
+  var d = onlyDigits(v).slice(0, 13);
+  if (d.length <= 6) return d;
+  return d.slice(0, 6) + '-' + d.slice(6);
+}
+
+function maskCaret(str, digitCount) {          // digitCount번째 숫자 바로 뒤 위치
+  if (digitCount <= 0) return 0;
+  var n = 0;
+  for (var i = 0; i < str.length; i++) {
+    if (MASK_D.test(str.charAt(i))) {
+      n++;
+      if (n >= digitCount) return i + 1;
+    }
+  }
+  return str.length;
+}
+
+/* 입력칸에 자동 포맷 연결 */
+function attachAutoFormat(input, fmt) {
+  if (!input) return;
+  var last = input.value || '';
+  input.addEventListener('input', function (e) {
+    var raw = input.value || '';
+    var it = (e && e.inputType) || '';
+    var sel = input.selectionStart;
+    var cut = -1;
+    if (it.indexOf('delete') === 0 && last.length === raw.length + 1) {
+      for (var i = 0; i < last.length; i++) {
+        if (last.charAt(i) !== (raw.charAt(i) || '')) { cut = i; break; }
+      }
+    }
+    if (cut > 0 && last.charAt(cut) === '-') {   // 하이픈만 지워진 경우 → 앞 숫자까지 함께 지움
+      raw = last.slice(0, cut - 1) + last.slice(cut + 1);
+      sel = cut - 1;
+    }
+    var out = fmt(raw);
+    input.value = out;
+    if (sel != null) {
+      var before = 0;
+      for (var j = 0; j < sel && j < raw.length; j++) if (MASK_D.test(raw.charAt(j))) before++;
+      var pos = maskCaret(out, before);
+      try { input.setSelectionRange(pos, pos); } catch (err) { }
+    }
+    last = out;
+  });
+  input.addEventListener('blur', function () {   // 붙여넣기·자동완성 뒤 한 번 더 정리
+    var out = fmt(input.value);
+    if (out !== input.value) input.value = out;
+    last = out;
+  });
+}
 function todayParts() {
   var d = new Date();
   return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() };
@@ -1380,20 +1476,20 @@ function renderCreate() {
     '<div id="form_contract">' +
       '<div class="formrow"><label>지사</label><select id="c_branch"><option>계룡+논산</option><option>계룡</option><option>논산</option></select></div>' +
       '<div class="g2"><div class="formrow"><label>관리사 성명</label><input id="c_name" placeholder="예: 홍길동"></div>' +
-      '<div class="formrow"><label>주민등록번호</label><input id="c_jumin" placeholder="000000-0000000" inputmode="numeric"></div></div>' +
-      '<div class="g2"><div class="formrow"><label>연락처</label><input id="c_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
-      '<div class="formrow"><label>계약기간 시작</label><input id="c_start" placeholder="2026-11-20" value="' + today + '"></div></div>' +
-      '<div class="g2"><div class="formrow"><label>계약기간 종료</label><input id="c_end" placeholder="' + y1 + '-11-19"></div>' +
+      '<div class="formrow"><label>주민등록번호</label><input id="c_jumin" placeholder="000000-0000000" inputmode="numeric" autocomplete="off"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>연락처</label><input id="c_phone" placeholder="010-0000-0000" inputmode="numeric" autocomplete="off"></div>' +
+      '<div class="formrow"><label>계약기간 시작</label><input id="c_start" placeholder="2026-11-20" inputmode="numeric" autocomplete="off" value="' + today + '"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>계약기간 종료</label><input id="c_end" placeholder="' + y1 + '-11-19" inputmode="numeric" autocomplete="off"></div>' +
       '<div class="formrow"><label>메모(선택)</label><input id="c_memo" placeholder=""></div></div>' +
       '<div class="formrow"><label>관리사 주소</label><input id="c_addr" placeholder="예: 대전광역시 유성구 대학로 99, 101동 1001호"></div>' +
     '</div>' +
     '<div id="form_close" class="hidden">' +
       '<div class="g2"><div class="formrow"><label>지사</label><select id="x_branch"><option>계룡</option><option>논산</option></select></div>' +
       '<div class="formrow"><label>이용자(산모) 성명</label><input id="x_name" placeholder="예: 윤슬기"></div></div>' +
-      '<div class="g2"><div class="formrow"><label>연락처</label><input id="x_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
+      '<div class="g2"><div class="formrow"><label>연락처</label><input id="x_phone" placeholder="010-0000-0000" inputmode="numeric" autocomplete="off"></div>' +
       '<div class="formrow"><label>제공인력(관리사)</label><input id="x_worker" placeholder="예: 김용미"></div></div>' +
-      '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" inputmode="numeric" placeholder="YYYY-MM-DD"></div>' +
-      '<div class="formrow"><label>서비스 종료일</label><input id="x_end" inputmode="numeric" placeholder="YYYY-MM-DD"></div></div>' +
+      '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD"></div>' +
+      '<div class="formrow"><label>서비스 종료일</label><input id="x_end" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD"></div></div>' +
       '<div class="g2"><div class="formrow"><label>이용유형(바우처)</label><input id="x_voucher" placeholder="예: A통합1"></div>' +
       '<div class="formrow"><label>서비스기간(일수)</label><input id="x_term" placeholder="예: 20일"></div></div>' +
       '<div class="g2"><div class="formrow"><label>기존 제공기간</label><input id="x_beforePeriod" placeholder="시작일·종료일 입력 시 자동"></div>' +
@@ -1401,13 +1497,18 @@ function renderCreate() {
       '<div class="g2"><div class="formrow"><label>기존 제공인력</label><input id="x_beforeWorker" placeholder="자동"></div>' +
       '<div class="formrow"><label>변경 제공인력</label><input id="x_afterWorker" placeholder="자동">' +
       '<label class="mini"><input type="checkbox" id="x_same"> 변동없음</label></div></div>' +
-      '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" inputmode="numeric" placeholder="YYYY-MM-DD"></div>' +
+      '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD"></div>' +
       '<div class="formrow"><label>메모(선택)</label><input id="x_memo" placeholder=""></div></div>' +
     '</div>' +
     '<div style="margin-top:16px"><button class="btn" id="c_ok">링크 만들기</button></div>' +
     '<div id="c_result" style="margin-top:12px"></div>' +
     '</div><button class="btn ghost" id="c_back">목록으로</button></div>';
   b.querySelector('#c_back').addEventListener('click', function () { refreshList(); });
+
+  /* 숫자만 입력해도 전화번호·날짜·주민번호에 하이픈 자동 (다른 input 처리보다 먼저 연결) */
+  [['c_phone', fmtPhone], ['c_jumin', fmtJumin], ['c_start', fmtDate], ['c_end', fmtDate],
+   ['x_phone', fmtPhone], ['x_start', fmtDate], ['x_end', fmtDate], ['x_apply', fmtDate]
+  ].forEach(function (p) { attachAutoFormat(b.querySelector('#' + p[0]), p[1]); });
 
   /* 양식 전환 */
   var sel = b.querySelector('#c_type');
