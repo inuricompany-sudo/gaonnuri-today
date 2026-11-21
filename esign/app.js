@@ -276,6 +276,7 @@ function docTitle() {
   if (isClose()) return CT.type || '서비스 종료안내문';
   return (CT.type || '관리사님 계약서식') + ' (' + (CT.branch || CO.branch || '계룡') + '지사)';
 }
+function docTitleDuo() { return (CT.type || '관리사님 계약서식') + ' (계룡·논산지사)'; }
 function periodLabel() { return isClose() ? '서비스기간' : '계약기간'; }
 function fmtYMD(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function deadlineOf() {   // 문서 제출 기한: 생성일 + 7일
@@ -301,7 +302,7 @@ function showIntro() {
     (late ? '<br>기한이 지났습니다. 담당자에게 문의해 주세요.' : '') + '</p>' +
     '<button class="bigbtn" id="startBtn">문서 검토 및 작성</button>' +
     '<div class="summary">' +
-    '<div class="row"><span class="k">문서 제목 :</span><span class="v">' + esc(docTitle()) + '</span></div>' +
+    '<div class="row"><span class="k">문서 제목 :</span><span class="v">' + esc(DUO ? docTitleDuo() : docTitle()) + '</span></div>' +
     '<div class="row"><span class="k">보낸 사람 :</span><span class="v">가온누리산후도우미</span></div>' +
     '<div class="row"><span class="k">수신인 :</span><span class="v">' + esc(CT.name) + '님</span></div>' +
     (isClose() && (CT.prefill || {}).voucher ? '<div class="row"><span class="k">이용유형 :</span><span class="v">' + esc(CT.prefill.voucher) + ((CT.prefill || {}).term ? ' · ' + esc(CT.prefill.term) : '') + '</span></div>' : '') +
@@ -461,10 +462,11 @@ function buildField(f) {
       '<span class="ph">눌러서 의견을 입력해 주세요 (선택)</span><span class="val"></span></div>');
     node.addEventListener('click', function () { openArea(f); });
   } else if (f.t === 'check') {
-    node = el('<div class="f chk" style="' + styles + '" role="checkbox" aria-checked="false">' +
+    node = el('<div class="f chk" style="' + styles + '" role="checkbox" aria-checked="' + (S.checks[f.id] ? 'true' : 'false') + '">' +
       '<span class="box"></span>' +
       '<svg viewBox="0 0 24 24" fill="none"><path d="M4.5 12.6 L9.6 18 L19.6 5.6" stroke="#0f5fa8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '<span class="hit"></span></div>');
+    if (S.checks[f.id]) node.classList.add('on');
     node.addEventListener('click', function () {
       S.checks[f.id] = !S.checks[f.id];
       node.classList.toggle('on', !!S.checks[f.id]);
@@ -859,7 +861,7 @@ function doSubmit() {
   showLoading(DUO ? '계룡·논산 문서를 저장하고 있어요' : '문서를 저장하고 있어요',
     DUO ? '서명 1장으로 2건을 서버에 저장합니다. 5~10초 걸립니다. 창을 닫지 말아 주세요' : '3~5초면 끝납니다. 창을 닫지 말아 주세요');
   var tStart = Date.now(), tBuild = 0;
-  var builder = (DUO && _stepA && _stepA.doc) ? buildSecondPdf(_stepA.doc) : buildFinalPdf();
+  var builder = (DUO && _stepA && _stepA.doc) ? buildSecondPdf(_stepA) : buildFinalPdf();
   builder.then(function (b64) {
     tBuild = Date.now() - tStart;
     var jobs = [];
