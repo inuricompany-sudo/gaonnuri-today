@@ -629,19 +629,17 @@ function goStep2() {
   var aState = pickState(CT, S), aConsent = CONSENT_AT, aCT = CT, aPages = PAGES.slice(0);
   var t0 = Date.now();
   buildFirstDuoPdf().then(function (outA) {
-    return outA.saveAsBase64().then(function (b64) {
-      _stepA = {
-        token: aCT.token, pdf: b64, st: aState, consentAt: aConsent, branch: aCT.branch,
-        doc: outA, pages: aPages, ms: Date.now() - t0
-      };
-      var d = DUO.docs[1];
-      STEP = 2;
-      applyDoc(d);
-      hideLoading(); _submitting = false;
-      buildRecipientUi();
-      window.scrollTo(0, 0);
-      toast('계룡 계약서 완료 · 논산은 다른 부분만 확인하고 서명 없이 제출하면 됩니다');
-    });
+    _stepA = {
+      token: aCT.token, st: aState, consentAt: aConsent, branch: aCT.branch,
+      doc: outA, pages: aPages, ms: Date.now() - t0, pdf: ''
+    };
+    var d = DUO.docs[1];
+    STEP = 2;
+    applyDoc(d);
+    hideLoading(); _submitting = false;
+    buildRecipientUi();
+    window.scrollTo(0, 0);
+    toast('계룡 계약서 완료 · 논산은 다른 부분만 확인하고 서명 없이 제출하면 됩니다');
   }).catch(function (e) {
     hideLoading(); _submitting = false;
     toast('1단계 계약서를 준비하지 못했습니다. 다시 시도해 주세요');
@@ -864,6 +862,11 @@ function doSubmit() {
   var builder = (DUO && _stepA && _stepA.doc) ? buildSecondPdf(_stepA) : buildFinalPdf();
   builder.then(function (b64) {
     tBuild = Date.now() - tStart;
+    // 1단계 문서는 2단계 PDF가 1쪽을 복사해 간 뒤에 직렬화한다(pdf-lib: 저장 후 복사 불가)
+    var sealA = (DUO && _stepA && _stepA.doc && !_stepA.pdf)
+      ? _stepA.doc.saveAsBase64().then(function (a64) { _stepA.pdf = a64; })
+      : Promise.resolve();
+    return sealA.then(function () {
     var jobs = [];
     if (DUO && _stepA) jobs.push({ token: _stepA.token, pdf: _stepA.pdf, st: _stepA.st, consentAt: _stepA.consentAt, branch: _stepA.branch });
     jobs.push({ token: curCT.token, pdf: b64, st: curState, consentAt: curConsent, branch: curCT.branch });
@@ -883,6 +886,7 @@ function doSubmit() {
       });
     });
     return chain.then(function () { return results; });
+    });
   }).then(function (results) {
     hideLoading(); _submitting = false;
     try {
