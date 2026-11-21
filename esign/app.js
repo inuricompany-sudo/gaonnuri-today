@@ -47,7 +47,16 @@ function api(payload) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload),
     redirect: 'follow'
-  }).then(function (r) { return r.json(); });
+  }).then(function (r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); }
+      catch (e) {
+        var msg = String(t || '').replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+        throw new Error('HTTP ' + r.status + (msg ? ' · ' + msg : '응답을 읽지 못했습니다'));
+      }
+    });
+  });
 }
 function toast(msg) {
   var t = el('<div style="position:fixed;left:50%;bottom:calc(var(--bar) + 22px);transform:translateX(-50%);' +
@@ -880,8 +889,8 @@ function doSubmit() {
           consentAt: j.consentAt, pdf: j.pdf, ua: navigator.userAgent
         }).then(function (r) {
           results.push({ branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '', ms: Date.now() - t1 });
-        }).catch(function () {
-          results.push({ branch: j.branch, ok: false, doneAt: '', error: 'network', ms: Date.now() - t1 });
+        }).catch(function (e) {
+          results.push({ branch: j.branch, ok: false, doneAt: '', error: String((e && (e.message || e)) || 'network'), ms: Date.now() - t1 });
         });
       });
     });
