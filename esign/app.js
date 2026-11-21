@@ -340,7 +340,7 @@ function showConsent() {
   var old = $('#consent'); if (old) old.remove();
   var ov = el('<div class="consent" id="consent">' +
     '<div class="cbox">' +
-    '<div class="chead">' + esc(docTitle()) + '</div>' +
+    '<div class="chead">' + esc(DUO ? docTitleDuo() : docTitle()) + '</div>' +
     '<div class="cbody">' +
     '<p class="cq">전자문서 및 전자서명 사용 동의서를 확인하시고 동의 여부를 체크해 주세요.</p>' +
     '<label class="ck" id="ck"><input type="checkbox" id="ckin"><span class="bx"></span>' +
@@ -879,22 +879,19 @@ function doSubmit() {
     var jobs = [];
     if (DUO && _stepA) jobs.push({ token: _stepA.token, pdf: _stepA.pdf, st: _stepA.st, consentAt: _stepA.consentAt, branch: _stepA.branch });
     jobs.push({ token: curCT.token, pdf: b64, st: curState, consentAt: curConsent, branch: curCT.branch });
-    var results = [], chain = Promise.resolve();
-    jobs.forEach(function (j) {
-      chain = chain.then(function () {
-        var t1 = Date.now();
-        return api({
-          action: 'submit', token: j.token,
-          checks: j.st.checks, signs: j.st.signs, opts: j.st.opts, texts: j.st.texts,
-          consentAt: j.consentAt, pdf: j.pdf, ua: navigator.userAgent
-        }).then(function (r) {
-          results.push({ branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '', ms: Date.now() - t1 });
-        }).catch(function (e) {
-          results.push({ branch: j.branch, ok: false, doneAt: '', error: String((e && (e.message || e)) || 'network'), ms: Date.now() - t1 });
-        });
+    // 두 건은 서로 다른 문서이므로 동시에 올린다(순서대로 하면 대기 시간이 2배)
+    return Promise.all(jobs.map(function (j) {
+      var t1 = Date.now();
+      return api({
+        action: 'submit', token: j.token,
+        checks: j.st.checks, signs: j.st.signs, opts: j.st.opts, texts: j.st.texts,
+        consentAt: j.consentAt, pdf: j.pdf, ua: navigator.userAgent
+      }).then(function (r) {
+        return { branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '', ms: Date.now() - t1 };
+      }).catch(function (e) {
+        return { branch: j.branch, ok: false, doneAt: '', error: String((e && (e.message || e)) || 'network'), ms: Date.now() - t1 };
       });
-    });
-    return chain.then(function () { return results; });
+    }));
     });
   }).then(function (results) {
     hideLoading(); _submitting = false;
