@@ -164,25 +164,83 @@ function fitFont(text, wPt, hPt) {
 
 /* ---------------- 수신자 화면 ---------------- */
 var app = null, CT = null, CO = null;
+var DUO = null, SIG_ONE = '', STEP = 1, STEPN = 1, _stepA = null;
+function fieldsOfDoc(ct) {
+  var c = /종료/.test((ct && ct.type) || '');
+  var fl = c ? CLOSE_FIELDS : CONTRACT_FIELDS;
+  var pages = c ? CLOSE_PAGES.slice(0) : branchPages(ct.branch);
+  return fl.filter(function (f) { return pages.indexOf(f.p) >= 0; });
+}
+function pickState(ct, st) {          // 문서 1건 몫만 골라내기
+  var ids = {};
+  fieldsOfDoc(ct).forEach(function (f) { ids[f.id] = 1; });
+  var out = { checks: {}, signs: {}, opts: {}, texts: {} };
+  ['checks', 'signs', 'opts', 'texts'].forEach(function (k) {
+    Object.keys((st && st[k]) || {}).forEach(function (id) { if (ids[id]) out[k][id] = st[k][id]; });
+  });
+  return out;
+}
+function applyDoc(d) {                 // 현재 문서를 CT/CO/FIELDS/PAGES에 물림
+  CT = d.ct; CO = d.co || {};
+  FORM = /종료/.test(CT.type || '') ? 'close' : 'contract';
+  FIELDS = isClose() ? CLOSE_FIELDS : CONTRACT_FIELDS;
+  PAGES = isClose() ? CLOSE_PAGES.slice(0) : branchPages(CT.branch);
+  _outDoc = null; _outJob = null;
+}
 function showRecipient(token) {
+  var t2 = qs('t2');
   app.innerHTML = '<div class="notice">계약서를 불러오는 중입니다…</div>';
-  api({ action: 'get', token: token }).then(function (r) {
-    if (!r.ok) {
+  var jobs = [api({ action: 'get', token: token })];
+  if (t2) jobs.push(api({ action: 'get', token: t2 }).catch(function () { return { ok: false }; }));
+  Promise.all(jobs).then(function (res) {
+    var r = res[0];
+    if (!r || !r.ok) {
       app.innerHTML = '<div class="notice err">' +
-        (r.error === 'not_found' ? '계약 링크를 찾을 수 없습니다. 담당자에게 다시 받아 주세요.' : '계약서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.') +
+        (r && r.error === 'not_found' ? '계약 링크를 찾을 수 없습니다. 담당자에게 다시 받아 주세요.' : '계약서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.') +
         '</div>';
       return;
     }
-    CT = r.contract; CO = r.company || {};
-    FORM = /종료/.test(CT.type || '') ? 'close' : 'contract';
-    FIELDS = isClose() ? CLOSE_FIELDS : CONTRACT_FIELDS;
+    DUO = null; SIG_ONE = ''; STEP = 1; STEPN = 1; _stepA = null;
     S = { checks: {}, signs: {}, opts: {}, texts: {}, filledFirst: false };
     CONSENT_OK = false; CONSENT_AT = '';
+    var a = { ct: r.contract, co: r.company || {} };
+    var r2 = res[1];
+    var b = (r2 && r2.ok && r2.contract && !/종료/.test(r2.contract.type || ''))
+      ? { ct: r2.contract, co: r2.company || {} } : null;
+    if (b) {                             // 계룡 + 논산 동시 발송: 한 링크로 두 문서
+      var both = [a, b];
+      var todo = both.filter(function (d) { return d.ct.status !== '완료'; });
+      if (!todo.length) { applyDoc(a); showDoneBoth(both); return; }
+      if (todo.length === 1) { applyDoc(todo[0]); showIntro(); return; }
+      DUO = { docs: both }; STEPN = 2;
+      applyDoc(both[0]); showIntro(); return;
+    }
+    applyDoc(a);
     if (CT.status === '완료') { showAlreadyDone(); return; }
     showIntro();
   }).catch(function () {
     app.innerHTML = '<div class="notice err">네트워크 오류로 계약서를 불러오지 못했습니다. 새로고침해 주세요.</div>';
   });
+}
+function showDoneBoth(docs) {            // 두 지사 모두 완료
+  var rows = docs.map(function (d) {
+    return '<div class="kv"><span class="k">' + esc(d.ct.branch) + '지사</span><span class="v">서명 완료' +
+      (d.ct.done ? ' · ' + esc(d.ct.done) : '') + '</span></div>';
+  }).join('');
+  app.innerHTML = '';
+  app.appendChild(el('<div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">' + esc(CT.type || '관리사님 계약서식') + ' (계룡·논산지사)</div>' +
+    '<div class="t2">' + esc(CT.name) + '</div></div></header>' +
+    '<div class="wrap">' +
+    '<div class="card" style="text-align:center;padding:26px 16px">' +
+    '<div style="font-size:38px;line-height:1">✅</div>' +
+    '<h2 style="margin-top:10px">이미 서명이 완료된 문서입니다</h2>' +
+    '<p class="muted" style="margin:6px 0 0">계룡·논산 계약서 모두 서명이 끝났습니다.</p>' +
+    '</div>' +
+    '<div class="card"><h2>계약 내용</h2>' + rows +
+    '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
+    '<div class="kv"><span class="k">계약기간</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div></div>' +
+    '<p class="muted small" style="text-align:center">문의: 가온누리 산후도우미 담당자</p></div></div>'));
 }
 function showAlreadyDone() {
   var parts = String(CT.done || '').split(' ');
@@ -216,7 +274,7 @@ var CONSENT_OK = false, CONSENT_AT = '';
 
 function docTitle() {
   if (isClose()) return CT.type || '서비스 종료안내문';
-  return (CT.type || '관리사님 계약서식') + ' (' + (CO.branch || CT.branch) + '지사)';
+  return (CT.type || '관리사님 계약서식') + ' (' + (CT.branch || CO.branch || '계룡') + '지사)';
 }
 function periodLabel() { return isClose() ? '서비스기간' : '계약기간'; }
 function fmtYMD(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
@@ -235,6 +293,9 @@ function showIntro() {
     '<div class="pad">' +
     '<h1>검토할 문서가 도착하였습니다.</h1>' +
     '<p class="lead">' + esc(CT.type || '관리사님 계약서식') + ' 내용을 검토하시고, 작성 후 전송해 주세요.</p>' +
+    (DUO ? '<p class="hint" style="color:var(--brand);font-weight:700;line-height:1.6">' +
+      '계룡지사·논산지사 계약서 <b>2건</b>을 한 번에 작성합니다.<br>' +
+      '1단계 계룡 → 2단계 논산 순서로 진행되고, 서명은 <b>한 번만</b> 하시면 두 문서에 모두 적용됩니다.</p>' : '') +
     '<p class="hint">아래 <b>문서 검토 및 작성</b> 버튼을 눌러 문서를 검토하세요.</p>' +
     '<p class="deadline' + (late ? ' late' : '') + '">문서 제출 기한은 <b>' + fmtYMD(dl) + '</b>까지입니다.' +
     (late ? '<br>기한이 지났습니다. 담당자에게 문의해 주세요.' : '') + '</p>' +
@@ -325,8 +386,8 @@ function buildRecipientUi() {
   app.innerHTML = '';
   var top = el(
     '<header class="top">' +
-    '<div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
-    '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + ' · ' + esc(CT.start) + '~' + esc(CT.end) + '</div></div>' +
+    '<div class="tinfo"><div class="t1">' + (DUO ? '<span style="color:var(--brand)">' + STEP + '/' + STEPN + '</span> ' : '') + esc(docTitle()) + '</div>' +
+    '<div class="t2">' + esc(CT.branch || CO.branch) + '지사 · ' + esc(CT.name) + ' · ' + esc(CT.start) + '~' + esc(CT.end) + '</div></div>' +
     '<div class="zoom"><button data-z="1" class="on">맞춤</button><button data-z="1.5">확대</button><button data-z="2.1">크게</button></div>' +
     '</header>');
   app.appendChild(top);
@@ -358,6 +419,10 @@ function buildRecipientUi() {
     layoutDoc();
     updateBar();
     bindUi();
+    if (SIG_ONE) {          // 2단계 문서에는 1단계 서명을 그대로 적용
+      signFieldIds().forEach(function (id) { S.signs[id] = SIG_ONE; paintSignNode(id, SIG_ONE); });
+      updateBar();
+    }
     // 관리사가 문서를 읽고 서명하는 동안 최종 PDF 베이스를 미리 만들어 둔다(제출 대기 최소화)
     var warm = function () { prepareOut().catch(function () { }); };
     if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 2500 });
@@ -495,7 +560,10 @@ function layoutArea(f, n) {
 function bindUi() {
   var btn = $('#nextBtn');
   btn.addEventListener('click', function () {
-    if (doneCount() === reqFields().length) { openSubmitSheet(); return; }
+    if (doneCount() === reqFields().length) {
+      if (DUO && STEP === 1) { goStep2(); return; }
+      openSubmitSheet(); return;
+    }
     goNext();
   });
   document.querySelectorAll('.zoom button').forEach(function (b) {
@@ -519,7 +587,9 @@ function updateBar() {
   for (var i = 0; i < req.length; i++) html += '<i class="' + (i < done ? 'on' : '') + '"></i>';
   pips.innerHTML = html;
   var all = done === req.length;
-  btn.textContent = all ? '작성 완료 · 제출하기' : (done === 0 ? '입력 시작' : '다음 항목');
+  btn.textContent = all
+    ? (DUO ? (STEP === 1 ? '다음 · 논산 계약서' : '작성 완료 · 2건 제출하기') : '작성 완료 · 제출하기')
+    : (done === 0 ? '입력 시작' : '다음 항목');
   btn.disabled = !CONSENT_OK;      // 전자서명 동의 전에는 시작할 수 없음
 }
 
@@ -542,6 +612,28 @@ function goNext() {
   if (f.t === 'sign') setTimeout(function () { openSignPad(f); }, 420);
 }
 
+/* 1단계(계룡) 완료 → 2단계(논산)로 이어서 */
+function goStep2() {
+  if (_submitting) return;
+  _submitting = true;
+  showLoading('1단계 계룡 계약서를 준비하고 있어요', '이어서 논산 계약서가 열립니다. 창을 닫지 말아 주세요');
+  var aState = pickState(CT, S), aConsent = CONSENT_AT, aCT = CT;
+  buildFinalPdf().then(function (b64) {
+    _stepA = { token: aCT.token, pdf: b64, st: aState, consentAt: aConsent, branch: aCT.branch };
+    var d = DUO.docs[1];
+    STEP = 2;
+    applyDoc(d);
+    hideLoading(); _submitting = false;
+    buildRecipientUi();
+    window.scrollTo(0, 0);
+    toast('계룡 계약서 완료 · 논산 계약서 서명란에 서명이 적용되었습니다');
+  }).catch(function (e) {
+    hideLoading(); _submitting = false;
+    toast('1단계 계약서를 준비하지 못했습니다. 다시 시도해 주세요');
+    console.error(e);
+  });
+}
+
 /* ---------------- 서명: 한 번 서명하면 서명란 전체에 적용 ---------------- */
 function signFieldIds() {
   return reqFields().filter(function (f) { return f.t === 'sign'; }).map(function (f) { return f.id; });
@@ -553,6 +645,7 @@ function paintSignNode(id, data) {
   n.classList.remove('flash');
 }
 function applySignAll(data, fromId) {
+  SIG_ONE = data;                  // 두 지사 문서에 같이 심을 서명
   var ids = signFieldIds();
   if (!ids.length && fromId) ids = [fromId];
   ids.forEach(function (id) { S.signs[id] = data; paintSignNode(id, data); });
@@ -562,8 +655,15 @@ function afterSignApply() {
   updateBar();
   var ids = signFieldIds();
   var left = reqFields().filter(function (f) { return !isDone(f); });
-  if (!left.length) { toast('필수 항목을 모두 채웠습니다. 제출해 주세요.'); return; }
-  toast('서명을 서명란 ' + ids.length + '곳에 모두 적용했습니다');
+  if (!left.length) {
+    toast(DUO && STEP === 1
+      ? '1단계 서명 완료 · [다음 · 논산 계약서]를 누르면 논산 서명란에도 자동 적용됩니다'
+      : '필수 항목을 모두 채웠습니다. 제출해 주세요.');
+    return;
+  }
+  toast(DUO && STEP === 1
+    ? '서명을 서명란 ' + ids.length + '곳에 적용했습니다 (논산 계약서에도 자동 적용)'
+    : '서명을 서명란 ' + ids.length + '곳에 모두 적용했습니다');
   var nf = nextUnfilled();
   if (nf && nf.t === 'check') {
     var n = fieldEls[nf.id];
@@ -718,11 +818,11 @@ function openSubmitSheet() {
     '<h3>서명을 제출할까요?</h3>' +
     '<div class="muted small">제출하면 계약서 원본에 입력한 내용과 서명이 그대로 합성되어 저장됩니다.</div>' +
     '<div class="card" style="margin:14px 0 0;padding:12px">' +
-    '<div class="kv"><span class="k">문서</span><span class="v">' + esc(CT.type || '관리사님 계약서식') + '</span></div>' +
-    '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CO.branch || CT.branch) + '지사</span></div>' +
+    '<div class="kv"><span class="k">문서</span><span class="v">' + esc(CT.type || '관리사님 계약서식') + (DUO ? ' (계룡 · 논산 2건)' : '') + '</span></div>' +
+    '<div class="kv"><span class="k">지사</span><span class="v">' + esc(DUO ? '계룡 · 논산' : (CT.branch || CO.branch) + '지사') + '</span></div>' +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
     '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
-    '<div class="kv"><span class="k">서명</span><span class="v">' + req.length + '개 항목 완료</span></div>' +
+    '<div class="kv"><span class="k">서명</span><span class="v">' + (DUO ? '두 문서 서명란에 동시 적용' : req.length + '개 항목 완료') + '</span></div>' +
     '</div>' +
     '<div class="row2" style="margin-top:14px"><button class="btn gray" id="cancel">취소</button>' +
     '<button class="btn" id="ok">서명 제출</button></div>' +
@@ -742,22 +842,41 @@ function hideLoading() { var l = $('#load'); if (l) l.remove(); }
 function doSubmit() {
   if (_submitting) return;
   _submitting = true;
-  showLoading('문서를 저장하고 있어요', '3~5초면 끝납니다. 창을 닫지 말아 주세요');
+  var curCT = CT, curState = pickState(CT, S), curConsent = CONSENT_AT;
+  showLoading(DUO ? '계룡·논산 문서를 저장하고 있어요' : '문서를 저장하고 있어요',
+    DUO ? '2건을 차례로 저장합니다. 5~10초 걸립니다. 창을 닫지 말아 주세요' : '3~5초면 끝납니다. 창을 닫지 말아 주세요');
   buildFinalPdf().then(function (b64) {
-    return api({
-      action: 'submit', token: CT.token,
-      checks: S.checks, signs: S.signs, opts: S.opts, texts: S.texts,
-      consentAt: CONSENT_AT,
-      pdf: b64, ua: navigator.userAgent
+    var jobs = [];
+    if (DUO && _stepA) jobs.push({ token: _stepA.token, pdf: _stepA.pdf, st: _stepA.st, consentAt: _stepA.consentAt, branch: _stepA.branch });
+    jobs.push({ token: curCT.token, pdf: b64, st: curState, consentAt: curConsent, branch: curCT.branch });
+    var results = [], chain = Promise.resolve();
+    jobs.forEach(function (j) {
+      chain = chain.then(function () {
+        return api({
+          action: 'submit', token: j.token,
+          checks: j.st.checks, signs: j.st.signs, opts: j.st.opts, texts: j.st.texts,
+          consentAt: j.consentAt, pdf: j.pdf, ua: navigator.userAgent
+        }).then(function (r) {
+          results.push({ branch: j.branch, ok: !!(r && r.ok), doneAt: (r && r.doneAt) || '', error: (r && r.error) || '' });
+        }).catch(function () {
+          results.push({ branch: j.branch, ok: false, doneAt: '', error: 'network' });
+        });
+      });
     });
-  }).then(function (r) {
+    return chain.then(function () { return results; });
+  }).then(function (results) {
     hideLoading(); _submitting = false;
-    if (!r || !r.ok) {
-      toast(r && r.error === 'already_done' ? '이미 저장된 계약서입니다' : '제출에 실패했습니다. 다시 시도해 주세요');
+    var bad = results.filter(function (x) { return !x.ok; });
+    if (!bad.length) {
+      CT.status = '완료'; CT.done = results[results.length - 1].doneAt || '';
+      showDone(results);
       return;
     }
-    CT.status = '완료'; CT.done = r.doneAt || '';
-    showDone(r);
+    if (results.length === 1) {
+      toast(bad[0].error === 'already_done' ? '이미 저장된 계약서입니다' : '제출에 실패했습니다. 다시 시도해 주세요');
+      return;
+    }
+    showSubmitPartial(results);
   }).catch(function (e) {
     hideLoading(); _submitting = false;
     toast('제출 중 오류가 발생했습니다. 다시 시도해 주세요.');
@@ -765,18 +884,44 @@ function doSubmit() {
   });
 }
 
-function showDone(r) {
+function showSubmitPartial(results) {      // 두 건 중 한 건만 저장된 경우
+  var rows = results.map(function (x) {
+    return '<div class="kv"><span class="k">' + esc(x.branch) + '지사</span><span class="v">' +
+      (x.ok ? '저장 완료' : '저장 실패') + '</span></div>';
+  }).join('');
   app.innerHTML = '';
   app.appendChild(el('<div>' +
     '<header class="top"><div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
-    '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
+    '<div class="t2">' + esc(CT.name) + '</div></div></header>' +
+    '<div class="wrap"><div class="card"><h2>일부 문서만 저장되었습니다</h2>' + rows +
+    '<p class="muted small" style="margin:10px 0 0">저장에 실패한 문서가 있습니다. [다시 시도]를 누르면 남은 문서부터 이어서 진행합니다.</p>' +
+    '<div style="margin-top:14px"><button class="btn" id="retry">다시 시도</button></div></div></div></div>'));
+  $('#retry').addEventListener('click', function () { location.reload(); });
+}
+
+function showDone(results) {
+  var duo = !!(results && results.length > 1);
+  var when = (results && results.length ? results[results.length - 1].doneAt : '') || '';
+  var rows = duo
+    ? results.map(function (x) {
+        return '<div class="kv"><span class="k">' + esc(x.branch) + '지사</span><span class="v">서명 완료' +
+          (x.doneAt ? ' · ' + esc(x.doneAt) : '') + '</span></div>';
+      }).join('')
+    : '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CT.branch || CO.branch) + '지사</span></div>';
+  var title = duo ? (CT.type || '관리사님 계약서식') + ' (계룡·논산지사)' : docTitle();
+  app.innerHTML = '';
+  app.appendChild(el('<div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">' + esc(title) + '</div>' +
+    '<div class="t2">' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:28px 16px">' +
     '<div style="font-size:40px;line-height:1">✅</div>' +
     '<h2 style="margin-top:10px">서명이 완료되었습니다</h2>' +
-    '<p class="muted" style="margin:6px 0 0">' + esc(r.doneAt || '') + ' (KST)</p>' +
+    '<p class="muted" style="margin:6px 0 0">' + esc(when) + ' (KST)' + (duo ? ' · 계룡·논산 2건 저장' : '') + '</p>' +
     '</div>' +
-    summaryCard() +
+    '<div class="card"><h2>계약 내용</h2>' + rows +
+    '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
+    '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div></div>' +
     '<div class="card"><h2>안내</h2><p class="muted small" style="margin:0">' +
     '서명하신 ' + (isClose() ? '종료안내문은' : '계약서는') + ' 가온누리 산후도우미에 자동 보관되었습니다. 따로 보내실 서류는 없습니다.<br>' +
     '문의: 가온누리 산후도우미 담당자</p></div></div></div>'));
@@ -950,7 +1095,15 @@ function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
    · Admin 키·REST API 키·Client Secret은 이 파일에 넣지 않습니다. */
 var KAKAO_JS_KEY = 'd9c778f46f68a0f4e86b5b5e88b5a859';
 var KAKAO_IMG = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png';
-function shareUrlOf(c) { return location.origin + location.pathname + '?t=' + encodeURIComponent((c && c.token) || ''); }
+function shareUrlOf(c) { return certLink(c); }
+function duoLinkOf(a, b) {
+  return location.origin + location.pathname + '?t=' + encodeURIComponent(a) + '&t2=' + encodeURIComponent(b);
+}
+function certLink(c) {                    // 두 지사 동시 발송이면 링크 1개(두 토큰)
+  if (c && c._t2) return duoLinkOf(c.token, c._t2);
+  return location.origin + location.pathname + '?t=' + encodeURIComponent((c && c.token) || '');
+}
+function branchLabelOf(c) { return c && c._t2 ? '계룡·논산' : ((c && c.branch) || '계룡'); }
 function kakaoInit() {
   try {
     if (!window.Kakao || !Kakao.init) return false;
@@ -959,9 +1112,9 @@ function kakaoInit() {
   } catch (e) { return false; }
 }
 function kakaoBannerPayload(c) {
-  var link = shareUrlOf(c);
+  var link = certLink(c);
   var typeLabel = isCloseType(c) ? '서비스 종료안내문' : (c.type || '관리사님 계약서식');
-  var branch = c.branch ? c.branch + '지사' : '';
+  var branch = c._t2 ? '계룡·논산지사' : (c.branch ? c.branch + '지사' : '');
   var who = c.name ? c.name + '님' : '수신자';
   return {
     objectType: 'feed',
@@ -1039,6 +1192,7 @@ function showPin() {
 }
 function renderDash(list) {
   kakaoInit();
+  pairDuoRows(list);
   app.innerHTML = '';
   var head = el('<div class="adminbar"><div class="t1">전자계약 관리</div>' +
     '<button class="linkbtn" id="newBtn">+ 새 계약</button>' +
@@ -1061,7 +1215,8 @@ function renderDash(list) {
     html += '<div class="list-row">' +
       '<div class="list-item" data-token="' + esc(c.token) + '">' +
       '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') + ' <span class="chip br">' + esc(c.branch) + '</span>' +
-      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>' : '') + '</div>' +
+      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>' : '') +
+      (c._t2 ? ' <span class="chip duo">계룡+논산</span>' : '') + '</div>' +
       '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
       '<div class="r"><span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span>' +
       '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
@@ -1073,16 +1228,41 @@ function renderDash(list) {
   html += '</div></div>';
   wrap.innerHTML = html;
   wrap.querySelectorAll('.list-item').forEach(function (n) {
-    n.addEventListener('click', function () { openDetail(n.getAttribute('data-token')); });
+    n.addEventListener('click', function () { openDetail(n.getAttribute('data-token'), byToken[n.getAttribute('data-token')]); });
   });
   wrap.querySelectorAll('[data-share]').forEach(function (b) {
     b.addEventListener('click', function () { sendKakaoBanner(byToken[b.getAttribute('data-share')]); });
   });
   wrap.querySelectorAll('[data-copy]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      copyText(location.origin + location.pathname + '?t=' + b.getAttribute('data-copy'))
-        .then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다.'); });
+    b.addEventListener('click', function () { copyRowLink(byToken[b.getAttribute('data-copy')]); });
+  });
+}
+/* 두 지사 동시 발송 건 묶기: 같은 사람·같은 기간으로 계룡/논산이 10분 안에 만들어졌으면 한 건 */
+function createdMs(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(s || ''));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : NaN;
+}
+function pairDuoRows(list) {
+  var used = {};
+  list.forEach(function (c) {
+    c._t2 = c._t2 || '';
+    if (c._t2 || used[c.token] || isCloseType(c) || c.branch !== '계룡') return;
+    var best = null, gapBest = 1e12;
+    list.forEach(function (o) {
+      if (o.token === c.token || used[o.token] || o.branch !== '논산' || isCloseType(o)) return;
+      if (o.name !== c.name || o.start !== c.start || o.end !== c.end) return;
+      if (String(o.jumin || '') !== String(c.jumin || '')) return;
+      var gap = Math.abs(createdMs(o.created) - createdMs(c.created));
+      if (isNaN(gap) || gap > 10 * 60 * 1000) return;
+      if (gap < gapBest) { gapBest = gap; best = o; }
     });
+    if (best) { c._t2 = best.token; best._t2 = c.token; used[best.token] = 1; used[c.token] = 1; }
+  });
+}
+function copyRowLink(c) {
+  var link = certLink(c);
+  copyText(link).then(function (ok) {
+    toast(ok ? (c && c._t2 ? '계룡·논산 링크(1개)를 복사했습니다' : '링크를 복사했습니다') : '복사에 실패했습니다.');
   });
 }
 function renderCreate() {
@@ -1097,7 +1277,7 @@ function renderCreate() {
       '<option value="서비스 종료안내문">서비스 종료안내문 (모니터링)</option>' +
     '</select></div>' +
     '<div id="form_contract">' +
-      '<div class="formrow"><label>지사</label><select id="c_branch"><option>계룡</option><option>논산</option></select></div>' +
+      '<div class="formrow"><label>지사</label><select id="c_branch"><option>계룡+논산</option><option>계룡</option><option>논산</option></select></div>' +
       '<div class="g2"><div class="formrow"><label>관리사 성명</label><input id="c_name" placeholder="예: 홍길동"></div>' +
       '<div class="formrow"><label>주민등록번호</label><input id="c_jumin" placeholder="000000-0000000" inputmode="numeric"></div></div>' +
       '<div class="g2"><div class="formrow"><label>연락처</label><input id="c_phone" placeholder="010-0000-0000" inputmode="tel"></div>' +
@@ -1217,26 +1397,52 @@ function renderCreate() {
       item = { token: '', type: type, branch: p.branch, name: p.name, start: p.start, end: p.end };
     }
     this.disabled = true;
+    var btn0 = this;
+    var doneBtn = function () { if (btn0) btn0.disabled = false; };
+    if (!close && p.branch === '계룡+논산') {          // 두 지사 동시 발송
+      api(Object.assign({}, p, { branch: '계룡' })).then(function (r1) {
+        if (!r1 || !r1.ok) { doneBtn(); toast('실패: ' + ((r1 && r1.error) || '오류')); return; }
+        return api(Object.assign({}, p, { branch: '논산' })).then(function (r2) {
+          doneBtn();
+          if (!r2 || !r2.ok) {
+            showCreated({ token: r1.token, type: type, branch: '계룡', name: p.name, start: p.start, end: p.end },
+              '계룡 계약서만 만들어졌습니다. 논산 계약서를 다시 만들어 주세요.');
+            return;
+          }
+          showCreated({ token: r1.token, _t2: r2.token, type: type, branch: '계룡', name: p.name, start: p.start, end: p.end }, '');
+        });
+      }).catch(function () { doneBtn(); toast('네트워크 오류'); });
+      return;
+    }
     api(p).then(function (r) {
-      var btn = $('#c_ok'); if (btn) btn.disabled = false;
+      doneBtn();
       if (!r.ok) { toast('실패: ' + (r.error || '오류')); return; }
-      var link = location.origin + location.pathname + '?t=' + r.token;
       item.token = r.token;
-      var box = $('#c_result');
-      box.innerHTML = '<div class="muted small" style="margin-bottom:6px">' +
-        (close ? '종료안내문 링크가 만들어졌습니다. 산모님께 링크를 보내 주세요.' : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.') + '</div>' +
-        '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
-        '<div class="copybtns wrapbtns"><button class="btn kakao" id="c_kakao">카톡 배너 보내기</button>' +
-        '<button class="btn gray" id="c_copy">링크만 복사</button>' +
-        '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
-      box.querySelector('#c_copy').addEventListener('click', function () {
-        var i = box.querySelector('#c_link'); i.select(); i.setSelectionRange(0, 999);
-        copyText(link).then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다. 길게 눌러 복사해 주세요.'); });
-      });
-      box.querySelector('#c_text').addEventListener('click', function () { copyGuide(item); });
-      box.querySelector('#c_kakao').addEventListener('click', function () { sendKakaoBanner(item); });
-    }).catch(function () { var btn = $('#c_ok'); if (btn) btn.disabled = false; toast('네트워크 오류'); });
+      showCreated(item, '');
+    }).catch(function () { doneBtn(); toast('네트워크 오류'); });
   });
+}
+/* 새 문서 결과 상자 (카톡 배너·링크 복사·안내문 복사) */
+function showCreated(it, warn) {
+  var box = $('#c_result');
+  if (!box) return;
+  var cl = isCloseType(it);
+  var link = certLink(it);
+  box.innerHTML = '<div class="muted small" style="margin-bottom:6px">' +
+    (warn ? '<b style="color:var(--danger)">' + esc(warn) + '</b><br>' : '') +
+    (cl ? '종료안내문 링크가 만들어졌습니다. 산모님께 링크를 보내 주세요.'
+      : (it._t2 ? '계룡·논산 계약서 2건이 만들어졌습니다. <b>링크 1개</b>로 두 문서를 함께 서명받습니다.'
+        : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.')) + '</div>' +
+    '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
+    '<div class="copybtns wrapbtns"><button class="btn kakao" id="c_kakao">카톡 배너 보내기</button>' +
+    '<button class="btn gray" id="c_copy">링크만 복사</button>' +
+    '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
+  box.querySelector('#c_copy').addEventListener('click', function () {
+    var i = box.querySelector('#c_link'); i.select(); i.setSelectionRange(0, 999);
+    copyText(link).then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다. 길게 눌러 복사해 주세요.'); });
+  });
+  box.querySelector('#c_text').addEventListener('click', function () { copyGuide(it); });
+  box.querySelector('#c_kakao').addEventListener('click', function () { sendKakaoBanner(it); });
 }
 function refreshList() {
   api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); });
@@ -1261,8 +1467,8 @@ function copyText(text) {
   return Promise.resolve(fallback());
 }
 function guideTextOf(c) {
-  var branch = c.branch || '계룡';
-  var link = location.origin + location.pathname + '?t=' + c.token;
+  var branch = branchLabelOf(c);
+  var link = certLink(c);
   var title = isCloseType(c) ? (c.type || '서비스 종료안내문') : (c.type || '관리사님 계약서식') + ' (' + branch + '지사)';
   return '[전자계약] 서명 요청이 왔습니다.\n\n' +
     '▶ 문서 제목\n' + title + '\n\n' +
@@ -1276,12 +1482,13 @@ function copyGuide(c) {
     toast(ok ? '안내문을 복사했습니다. 카톡·문자에 붙여넣어 보내세요.' : '복사에 실패했습니다. 잠시 후 다시 시도해 주세요.');
   });
 }
-function openDetail(token) {
+function openDetail(token, row) {
   api({ action: 'detail', sid: SID, token: token }).then(function (r) {
     if (!r.ok) { toast('불러오지 못했습니다'); return; }
     var c = r.item;
+    if (row && row._t2) c._t2 = row._t2;
     var sheet = el('<div class="sheet"><div class="panel" style="max-height:92vh;overflow:auto">' +
-      '<h3>' + esc(c.name) + ' · ' + esc(c.branch) + '지사</h3>' +
+      '<h3>' + esc(c.name) + ' · ' + esc(branchLabelOf(c)) + '지사</h3>' +
       '<div class="muted small">' + esc(c.type || '') + ' · ' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span></div>' +
       '<div class="card" style="margin:14px 0 0;padding:12px">' +
       (isCloseType(c)
@@ -1291,6 +1498,7 @@ function openDetail(token) {
         : '<div class="kv"><span class="k">주민번호</span><span class="v">' + esc(c.jumin || '-') + '</span></div>' +
           '<div class="kv"><span class="k">주소</span><span class="v">' + esc(c.address || '-') + '</span></div>') +
       '<div class="kv"><span class="k">연락처</span><span class="v">' + esc(c.phone || '-') + '</span></div>' +
+      (c._t2 ? '<div class="kv"><span class="k">발송</span><span class="v">계룡·논산 동시 발송 · 링크 1개</span></div>' : '') +
       '<div class="kv"><span class="k">생성</span><span class="v">' + esc(c.created || '-') + '</span></div>' +
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
@@ -1305,7 +1513,7 @@ function openDetail(token) {
     document.body.appendChild(sheet);
     sheet.querySelector('#d_close').addEventListener('click', function () { sheet.remove(); });
     sheet.querySelector('#d_link').addEventListener('click', function () {
-      copyText(location.origin + location.pathname + '?t=' + token)
+      copyText(certLink(c))
         .then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다.'); });
     });
     var dtext = sheet.querySelector('#d_text');
