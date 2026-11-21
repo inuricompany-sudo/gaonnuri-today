@@ -987,6 +987,7 @@ function sendKakaoBanner(c) {
   }
 }
 function showAdmin() {
+  kakaoInit();
   if (SID) { api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); else { SID = ''; sessionStorage.removeItem(SIDKEY); showPin(); } }); }
   else showPin();
 }
@@ -1037,6 +1038,7 @@ function showPin() {
   });
 }
 function renderDash(list) {
+  kakaoInit();
   app.innerHTML = '';
   var head = el('<div class="adminbar"><div class="t1">전자계약 관리</div>' +
     '<button class="linkbtn" id="newBtn">+ 새 계약</button>' +
