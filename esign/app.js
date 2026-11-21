@@ -918,7 +918,7 @@ function doSubmit() {
 function showSubmitPartial(results) {      // 두 건 중 한 건만 저장된 경우
   var rows = results.map(function (x) {
     return '<div class="kv"><span class="k">' + esc(x.branch) + '지사</span><span class="v">' +
-      (x.ok ? '저장 완료' : '저장 실패') + '</span></div>';
+      (x.ok ? '저장 완료' : '저장 실패' + (x.error ? ' (' + esc(x.error) + ')' : '')) + '</span></div>';
   }).join('');
   app.innerHTML = '';
   app.appendChild(el('<div>' +
