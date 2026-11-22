@@ -688,6 +688,8 @@
         html = IS_WEEKEND
           ? '<div class="empty">주말(토·일)은 기본 휴무입니다.<br>근무표에 올라온 사람만 표시돼요.</div>'
           : '<div class="empty">오늘 배정이 없습니다.</div>';
+        // v28: 주말이라 목록이 비어 있어도 '내일 시작'(일요일이면 월요일 시작 산모)은 그대로 보여 줍니다.
+        html += tomorrowSection(data);
       } else {
         var items = data.items;
         var i = 0;
