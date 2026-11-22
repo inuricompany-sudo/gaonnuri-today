@@ -762,11 +762,11 @@
       var list = document.getElementById('list');
       var html = '';
       if (VIEW.isPast) {
-        // v30: 근무쌍 목록 없이 '종료 총 인원' 과 종료 서류 숫자만
-        html = endSumHtml(data);
+        // v30.1: 총 인원 요약 카드는 유지, 종료 서류는 v23~v26 상세 목록으로 복구 (예찬님 지시)
+        html = endSumHtml(data) + closeDocsHtml(data);
       } else if (VIEW.isFuture) {
-        // v30: 시작 예정 · 계속 진행 · 교육대기 인원만
-        html = planSumHtml(data);
+        // v30.1: 시작 예정 · 계속 진행 인원 요약은 유지, 교육대기는 v29 상세 카드로 복구 (예찬님 지시)
+        html = planSumHtml(data) + eduSection(data);
       } else if (!data.items || !data.items.length) {
         // v28: 주말(토·일)은 캘린더 기간을 무시하고 실제 근무표 기록만 보므로, 비어 있는 게 정상입니다.
         html = IS_WEEKEND
@@ -808,8 +808,9 @@
       else if (VIEW.isPast && data.hasDateColumn === false) toast(data.sheetName + '에 ' + VIEW.short + ' 열이 없습니다.');
     }
 
-    /* ── v30: 종료 화면 — 총 인원 + 종료 서류 숫자 요약 ───────────────
-       근무쌍(산모─관리사) 목록은 그리지 않습니다. (예찬님 지시)
+    /* ── v30.1: 종료 화면 — 총 인원 요약 + 종료 서류 상세(v23~v26 복구) ──
+       근무쌍(산모─관리사) 목록 대신 총 인원 카드만 보여 주는 것은 v30 그대로 두고,
+       v30 에서 숫자로 줄였던 종료 서류는 상세 목록으로 되돌렸습니다. (예찬님 지시)
        인원은 관리사 수 기준이고, 쌍둥이는 두 관리사가 각각 1명으로 셉니다. */
     function sumCare_(d) { return (d && d.sum && typeof d.sum.caregivers === 'number') ? d.sum.caregivers : 0; }
     function sumMoms_(d) { return (d && d.sum && typeof d.sum.mothers === 'number') ? d.sum.mothers : 0; }
@@ -827,23 +828,11 @@
           '<div class="sumsub">' + esc(sub) + '</div>' +
         '</div>';
 
-      var cs = data.closeSum || null;
-      if (cs && cs.total) {
-        h += '<div class="sumcard">' +
-          '<div class="sttl">🗂 종료 서류<span class="hint">대상 ' + cs.total + '명' +
-            (cs.pending ? ' · 미발송 ' + cs.pending + '명' : ' · 모두 발송') + '</span></div>' +
-          '<div class="sumline"><span class="snm">보건소메일</span><span class="svals">' +
-            '<span class="snum' + (cs.mailMiss ? ' miss' : '') + '">미발송 ' + cs.mailMiss + '</span>' +
-            '<span class="sumsub" style="margin:0">발송 ' + cs.mailDone + '</span></span></div>' +
-          '<div class="sumline"><span class="snm">종료안내문</span><span class="svals">' +
-            '<span class="snum' + (cs.letterMiss ? ' miss' : '') + '">미발송 ' + cs.letterMiss + '</span>' +
-            '<span class="sumsub" style="margin:0">발송 ' + cs.letterDone + '</span></span></div>' +
-        '</div>';
-      }
-      return h + '</section>';
+      return h + '</section>';   // v30.1: 종료 서류 숫자 카드는 빼고, 뒤에 상세 목록을 붙입니다
     }
 
-    /* ── v30: 예정 화면 — 시작·계속·교육대기 인원만 ────────────────── */
+    /* ── v30.1: 예정 화면 — 시작·계속 인원 요약 + 교육대기 상세(v29 복구) ──
+       v30 에서 인원 요약으로 줄였던 교육대기는 v29 의 상세 카드·모달로 되돌렸습니다. (예찬님 지시) */
     function planSumHtml(data) {
       var p = data.plan || { start: 0, cont: 0, trainee: 0 };
       var start = p.start || 0, cont = p.cont || 0;
@@ -861,23 +850,7 @@
             '<span class="snum">' + cont + '명</span></span></div>' +
         '</div>';
 
-      if (p.trainee) {
-        var tr = data.trainees || [], whens = {}, list = [], i;
-        for (i = 0; i < tr.length; i++) {
-          var w = whenText_(tr[i].when);
-          if (!whens[w]) { whens[w] = 0; list.push(w); }
-          whens[w]++;
-        }
-        var wtxt = '';
-        for (i = 0; i < list.length; i++) wtxt += (i ? ' · ' : '') + esc(list[i]) + ' ' + whens[list[i]] + '명';
-        h += '<div class="sumcard edu">' +
-          '<div class="sttl">🎓 교육대기</div>' +
-          '<div class="sumline"><span class="snm">교육 후 근무 시작</span><span class="svals">' +
-            '<span class="snum">' + p.trainee + '명</span></span></div>' +
-          (wtxt ? '<div class="sumsub">' + wtxt + '</div>' : '') +
-        '</div>';
-      }
-      return h + '</section>';
+      return h + '</section>';   // v30.1: 교육대기 숫자 카드는 빼고, 뒤에 v29 상세 카드를 붙입니다
     }
 
     /* ── v23: 탭 이동 (종료 / 오늘 / 예정) ──────────────────────────
@@ -932,6 +905,42 @@
       return /예정$/.test(w) ? w : (w + ' 예정');
     }
     /* v29: 인원수는 산모 수가 아니라 관리사 수 (쌍둥이는 각각 1명) */
+    /* v30.1: 교육대기 상세 카드 — v29 을 그대로 되돌려 놓았습니다. */
+    function careN(list) {
+      var n = 0;
+      list = list || [];
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i] || {};
+        n += (it.caregivers && it.caregivers.length) ? it.caregivers.length : (it.caregiver ? 1 : 0);
+      }
+      return n;
+    }
+    function eduRowHtml(tr, idx) {
+      var bad = tr.bad > 0;
+      var jisa = tr.jisa ? '<span class="jisa">' + esc(tr.jisa) + '</span>' : '';
+      var doc = '<span class="dnum' + (bad ? ' bad' : '') + '">' + (bad ? '서류 ' + tr.bad : '서류 정상') + '</span>';
+      return '<div class="row next edu">' +
+        '<div class="mnext">' +
+          '<button class="trname" data-tr="' + idx + '" title="눌러서 서류·전화 확인">' + esc(tr.name) + '</button>' +
+          '<span class="nextbadge edu">' + esc(whenText_(tr.when)) + '</span>' +
+        '</div>' +
+        '<span class="line"></span>' +
+        '<div class="tnames">' +
+          '<button class="tredu" data-tr="' + idx + '" title="눌러서 서류·전화 확인">' +
+            '<span class="tedu">' + jisa + doc + '</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }
+    function eduSection(data) {
+      var tr = data.trainees || [];
+      if (!tr.length) return '';        // 교육대기생이 없으면 그리지 않습니다
+      var html = '<section class="tsec" style="border-top:0;margin-top:2px;padding-top:0">' +
+        '<div class="thead"><span class="ttl edu">🎓 교육대기 (' + tr.length + '명)</span>' +
+        '<span class="tsub">교육 후 근무 시작 · 눌러서 서류 확인</span></div>';
+      for (var i = 0; i < tr.length; i++) html += eduRowHtml(tr[i], i);
+      return html + '</section>';
+    }
 
 
     /* v23: 발송 상태 문구 — 산모 모달에서 씁니다. */
@@ -939,6 +948,48 @@
       if (!st) return '미발송';
       if (typeof st === 'string') return st || '미발송';
       return st.text || (st.done ? '완료' : '미발송');
+    }
+    /* v30.1: 종료 서류 상세 — v23(v26) 을 그대로 되돌려 놓았습니다. */
+    function badgeHtml(label, st) {
+      var done = !!(st && st.done);
+      return '<span class="bg ' + (done ? 'ok' : 'miss') + '">' + esc(label) + ' ' + esc(sendText_(st)) + '</span>';
+    }
+    function closeDocsHtml(data) {
+      var cd = data.closeDocs || [];
+      if (!cd.length) return '';
+      var v = data.view || {};
+      var td = (data.today || {}).date || '';
+      // v26: '어제' 화면에서는 어제 종료분 + 오늘 종료·오늘 발송분을 함께 보여 줍니다.
+      //      머리말에는 실제로 들어 있는 종료일 범위를 적습니다. (예: 11/13~11/20 종료)
+      var minEnd = '', maxEnd = '';
+      for (var k = 0; k < cd.length; k++) {
+        if (!cd[k].end) continue;
+        if (!minEnd || cd[k].end < minEnd) minEnd = cd[k].end;
+        if (!maxEnd || cd[k].end > maxEnd) maxEnd = cd[k].end;
+      }
+      function shortMd(d) { return d ? (Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10))) : ''; }
+      var sub = v.isPast
+        ? (esc(shortMd(minEnd)) + (maxEnd && maxEnd !== minEnd ? '~' + esc(shortMd(maxEnd)) : '') + ' 종료'
+           + (td && maxEnd === td ? ' · 오늘 포함' : ''))
+        : ('최근 ' + (data.closeDays || 7) + '일 종료');
+      var h = '<section class="tsec"><div class="thead">' +
+        '<span class="ttl green">🗂 종료 서류 발송</span><span class="tsub">' + sub + '</span>' +
+        '</div>';
+      for (var i = 0; i < cd.length; i++) {
+        var c = cd[i];
+        var isTodayEnd = !!(td && c.end === td);
+        var due = '';
+        if (isTodayEnd) due = '<span class="cdue">오늘 종료</span>';
+        h += '<div class="cdrow' + (isTodayEnd ? ' today' : '') + '">' +
+          '<div class="cdtop">' +
+            '<span class="cm">' + esc(c.mother) + '</span>' +
+            '<span class="cdt">' + esc(c.endShort) + ' 종료</span>' + due +
+          '</div>' +
+          '<div class="cdbs">' + badgeHtml('보건소메일', c.mail) + badgeHtml('종료안내문', c.letter) + '</div>' +
+          (c.note ? '<div class="cdnote">' + esc(c.note) + '</div>' : '') +
+        '</div>';
+      }
+      return h + '</section>';
     }
 
     /* ── v19: 산모별 카드체크 일수·날짜별 내역은 화면이 뜬 뒤 따로 ──────
@@ -1013,6 +1064,16 @@
     /* 열려 있는 패널을 최신 DATA로 다시 그립니다. (스크롤 위치 유지) */
     function refreshModal() {
       if (!MODAL) return;
+      // v29: 교육대기생 패널 — 이름으로 다시 찾아 최신 서류로 그립니다. (v30.1 복구)
+      if (MODAL.kind === 'trainee') {
+        var trs = DATA.trainees || [], ti = -1;
+        for (var tt = 0; tt < trs.length; tt++) if (trs[tt].name === MODAL.key) { ti = tt; break; }
+        if (ti < 0) return;
+        var boxT = document.getElementById('sheetbox'), keepT = boxT.scrollTop;
+        openTrainee(ti);
+        boxT.scrollTop = keepT;
+        return;
+      }
       var list = DATA.items || [], idx = -1, i;
       for (i = 0; i < list.length; i++) {
         if (MODAL.kind === 'docs' ? list[i].caregiver === MODAL.key : list[i].mother === MODAL.key) { idx = i; break; }
@@ -1247,6 +1308,9 @@
       if (sms) { sendSms(Number(sms.dataset.sms)); return; }
       var mom = ev.target.closest ? ev.target.closest('.mother[data-mom]') : null;
       if (mom) { syncQuiet(false); openMother(Number(mom.getAttribute('data-mom'))); return; }
+      // v29: 교육대기생 카드 — 서류·전화 모달 (v30.1 복구)
+      var trbtn = ev.target.closest ? ev.target.closest('[data-tr]') : null;
+      if (trbtn) { openTrainee(Number(trbtn.getAttribute('data-tr'))); return; }
       var btn = ev.target.closest ? ev.target.closest('.care') : null;
       if (btn) { syncQuiet(false); openDocs(Number(btn.dataset.idx)); return; }
       if (ev.target.id === 'modal' || ev.target.id === 'closeModal') closeModal();
@@ -1276,6 +1340,41 @@
         '<div class="meta">' + esc(it.mother) + ' 산모 담당 · ' + esc(head) + '</div>' +
         '<div class="docs">' + rows + '</div>' +
         '<div class="actions">' + drive + '<button class="btn" id="closeModal">닫기</button></div>';
+      document.getElementById('modal').classList.add('open');
+    }
+    /* v29: 교육대기생 — 서류 8종 · 드라이브 폴더 · 전화번호 (v30.1: v29 그대로 복구) */
+    function openTrainee(idx) {
+      var tr = (DATA.trainees || [])[idx];
+      if (!tr) return;
+      MODAL = { kind: 'trainee', key: tr.name };
+      var bad = 0, rows = '', i;
+      for (i = 0; i < (tr.docs || []).length; i++) {
+        var d = tr.docs[i];
+        if (d.counted && (d.status === 'expired' || d.status === 'missing')) bad++;
+        rows += '<div class="doc">' +
+          '<span class="nm">' + esc(d.label) + '</span>' +
+          '<span class="dt">' + esc(d.date) + '</span>' +
+          '<span class="st ' + d.status + '">' + esc(d.statusText) + '</span>' +
+        '</div>';
+      }
+      if (!tr.docs || !tr.docs.length) rows = '<div class="doc"><span class="nm">시트에 서류 정보가 없습니다</span></div>';
+      var head = bad > 0 ? '서류 부족·만료 ' + bad + '건' : '서류 정상';
+      var meta = [];
+      meta.push('교육대기 · ' + whenText_(tr.when));
+      if (tr.jisa) meta.push(tr.jisa);
+      if (tr.phone) meta.push(tr.phone);
+      meta.push(head);
+      var drive = tr.folder
+        ? '<a class="btn primary" href="' + esc(tr.folder) + '" target="_top">서류 폴더</a>'
+        : '<span class="btn" style="color:#8a8f8a">폴더 없음</span>';
+      var tel = tr.phone
+        ? '<a class="btn" href="tel:' + esc(String(tr.phone).replace(/[^0-9+]/g, '')) + '" title="' + esc(tr.phone) + '">📞 전화</a>'
+        : '<span class="btn" style="color:#8a8f8a">번호 없음</span>';
+      document.getElementById('sheetbox').innerHTML =
+        '<h2>' + esc(tr.name) + '</h2>' +
+        '<div class="meta">' + esc(meta.join(' · ')) + '</div>' +
+        '<div class="docs">' + rows + '</div>' +
+        '<div class="actions">' + drive + tel + '<button class="btn" id="closeModal">닫기</button></div>';
       document.getElementById('modal').classList.add('open');
     }
     /* v14: 산모 이름 → 근무표 기준 카드체크 일수·날짜별 내역 모달 */
