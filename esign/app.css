@@ -120,7 +120,11 @@ header.top .t2{font-size:12px; color:var(--sub); white-space:nowrap; overflow:hi
 .notice{padding:14px; text-align:center; color:var(--sub); font-size:14px}
 .notice.err{color:var(--danger); background:#fdf0ee; border:1px solid #f3cfc9; border-radius:12px; margin:14px}
 .btn{display:inline-block; text-align:center; background:var(--brand); color:#fff; font-weight:700;
-  border-radius:11px; padding:12px 16px; font-size:15px; width:100%; letter-spacing:-.2px}
+  border-radius:11px; padding:12px 16px; font-size:15px; width:100%; letter-spacing:-.2px;
+  text-decoration:none; box-sizing:border-box; line-height:1.35}
+/* v29: 문자로 보내기(<a href="sms:…">) — 카톡(노랑)·복사(회색)와 구분되는 기본 초록 */
+.btn.sms{background:var(--brand); color:#fff}
+.btn.sms:active{background:var(--brand-dark)}
 .btn.ghost{background:#fff; color:var(--brand); border:1px solid var(--brand)}
 .btn.gray{background:#eef1f4; color:#333}
 .btn:disabled{background:#cfd6dd}

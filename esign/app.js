@@ -4,6 +4,7 @@
    · 제출: 원본 PDF의 4쪽을 그대로 복사(벡터)하고 입력 글자·체크·서명만 얹어 저장
      → 글자는 원본과 100% 같은 선명도, 파일은 170KB 내외, 제출 대기 1~2초
    · 공개 저장소에는 개인정보·PIN 없음(테스트는 홍길동)
+   · v29: 관리자 자동로그인(localStorage) + [링크만 복사]→[문자로 보내기(sms: URI)]
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
@@ -16,6 +17,9 @@ var PW = 595, PH = 841;          // A4 (pt)
 var OV = 4;                      // 입력 글자 오버레이 해상도(1pt=4px ≈ 288dpi)
 var FONT = '"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo","NanumGothic",sans-serif';
 var SIDKEY = 'esign_sid_v3';
+/* v29: 관리자 자동로그인 — 오늘현황 앱과 같은 방식으로 PIN을 이 기기에만 저장합니다.
+   (localStorage / 가역 인코딩. [나가기]를 누르면 즉시 지웁니다.) */
+var PINKEY = 'esign_pin_v1';
 
 /* ---------------- 공통 ---------------- */
 function $(s, r) { return (r || document).querySelector(s); }
@@ -1283,8 +1287,31 @@ function buildFirstDuoPdf() {          // 1단계: 문서 객체를 남겨 두 �
 }
 
 /* ---------------- 관리자 ---------------- */
-var SID = sessionStorage.getItem(SIDKEY) || '';
+var SID = '';
+try { SID = sessionStorage.getItem(SIDKEY) || ''; } catch (e) {}
 function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
+
+/* ---------------- 자동로그인 저장소 (이 기기) ---------------- */
+function ls_() { try { return window.localStorage; } catch (e) { return null; } }
+function encPin_(p) { try { return btoa(String(p)); } catch (e) { return ''; } }
+function decPin_(v) { try { return atob(String(v)); } catch (e) { return ''; } }
+function savedPin() {
+  var l = ls_();
+  try { var v = l && l.getItem(PINKEY); return v ? decPin_(v) : ''; } catch (e) { return ''; }
+}
+function savePin(p) {
+  var l = ls_();
+  try { if (l && p) l.setItem(PINKEY, encPin_(p)); } catch (e) {}
+}
+function clearSavedPin() {
+  var l = ls_();
+  try { if (l) l.removeItem(PINKEY); } catch (e) {}
+}
+function clearSession() {
+  SID = '';
+  try { sessionStorage.removeItem(SIDKEY); } catch (e) {}
+}
+function clearLogin() { clearSession(); clearSavedPin(); }   // [나가기] — 다시 들어가려면 PIN 입력
 
 /* ---------------- 카톡 배너(클릭 카드) 공유 ----------------
    · JavaScript 키는 카카오 JS SDK용 공개 키입니다(등록한 도메인에서만 동작).
@@ -1301,6 +1328,40 @@ function certLink(c) {                    // 두 지사 동시 발송이면 링�
   return location.origin + location.pathname + '?t=' + encodeURIComponent((c && c.token) || '');
 }
 function branchLabelOf(c) { return c && c._t2 ? '계룡·논산' : ((c && c.branch) || '계룡'); }
+
+/* ---------------- 문자로 보내기 (v29) ----------------
+   · sms:{번호}?body={인코딩} 표준 형식 — 안드로이드·아이폰 기본 문자 앱이 바로 뜹니다.
+   · 번호가 비어 있으면 번호 없이 열고, 문자 앱에서 받는 사람을 고르게 합니다. */
+function smsNumber(c) { return String((c && c.phone) || '').replace(/[^0-9]/g, ''); }
+function smsBodyOf(c) {
+  var link = certLink(c);
+  var who = (c && c.name) ? c.name + '님' : '안녕하세요';
+  var period = (c && c.start && c.end) ? (c.start + ' ~ ' + c.end) : '';
+  if (isCloseType(c)) {
+    return '[가온누리산후도우미]\n' + who + ', 안녕하세요.\n' +
+      '서비스 종료안내문을 보내 드립니다.' + (period ? '\n이용기간: ' + period : '') + '\n\n' +
+      '아래 링크에서 내용을 확인하시고 전자서명해 주시면 감사하겠습니다.\n' + link + '\n\n' +
+      '링크는 본인만 사용하실 수 있도록 다른 분께 공유하지 말아 주세요.';
+  }
+  return '[가온누리산후도우미]\n' + who + ', 안녕하세요.\n' +
+    '관리사님 계약서식(' + branchLabelOf(c) + '지사) 검토와 전자서명을 부탁드립니다.' +
+    (period ? '\n계약기간: ' + period : '') + '\n\n' +
+    '▶ 문서 확인·서명하기\n' + link + '\n\n' +
+    '링크는 본인만 사용하실 수 있도록 다른 분께 공유하지 말아 주세요.';
+}
+function smsHrefOf(c) { return 'sms:' + smsNumber(c) + '?body=' + encodeURIComponent(smsBodyOf(c)); }
+function smsAttrTitle(c) {
+  return smsNumber(c) ? '' : ' title="연락처가 비어 있어 문자 앱에서 받는 사람을 직접 고르셔야 합니다"';
+}
+function bindSmsButtons(root, byToken) {
+  root.querySelectorAll('[data-sms]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.stopPropagation();                                  // 목록 행 클릭(상세 열기)으로 번지지 않게
+      var c = byToken && byToken[a.getAttribute('data-sms')];
+      if (c && !smsNumber(c)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
+    });
+  });
+}
 function kakaoInit() {
   try {
     if (!window.Kakao || !Kakao.init) return false;
@@ -1338,32 +1399,76 @@ function sendKakaoBanner(c) {
 }
 function showAdmin() {
   kakaoInit();
-  if (SID) { api({ action: 'list', sid: SID }).then(function (r) { if (r.ok) renderDash(r.list); else { SID = ''; sessionStorage.removeItem(SIDKEY); showPin(); } }); }
-  else showPin();
+  if (SID) {
+    api({ action: 'list', sid: SID }).then(function (r) {
+      if (r && r.ok) return renderDash(r.list);
+      clearSession();          // 세션만 만료된 경우 — 저장된 PIN으로 조용히 다시 들어갑니다
+      autoLogin();
+    }).catch(function () { showPin(''); });
+    return;
+  }
+  autoLogin();
 }
-function showPin() {
+/* 저장된 PIN이 있으면 잠금 화면 없이 바로 관리자 화면 (오늘현황 앱과 같은 자동로그인) */
+function autoLogin() {
+  var pin = savedPin();
+  if (!pin) { showPin(''); return; }
+  showPin('', true);
+  api({ action: 'login', pin: pin }).then(function (r) {
+    if (r && r.ok) {
+      SID = r.sid;
+      try { sessionStorage.setItem(SIDKEY, SID); } catch (e) {}
+      if (r.list) return renderDash(r.list);
+      return api({ action: 'list', sid: SID }).then(function (l) {
+        if (l && l.ok) return renderDash(l.list);
+        clearSavedPin();
+        showPin('목록을 불러오지 못했습니다. PIN을 다시 입력해 주세요.');
+      });
+    }
+    if (r && r.error === 'locked') { showPin('5회 오입력으로 10분간 잠겼습니다'); return; }
+    if (r && r.error === 'bad_pin') {
+      clearSavedPin();          // 저장된 PIN이 더 이상 맞지 않습니다 — 처음부터 다시
+      showPin('저장된 PIN이 맞지 않습니다. 다시 입력해 주세요.');
+      return;
+    }
+    showPin('');
+  }).catch(function () { showPin('네트워크 오류 — PIN을 입력해 주세요.'); });
+}
+function showPin(msg0, opening) {
   app.innerHTML = '';
-  app.appendChild(el('<header class="top"><div class="tinfo"><div class="t1">가온누리 전자계약 · 관리자</div><div class="t2">관리자 PIN 4자리를 입력해 주세요</div></div></header>'));
+  app.appendChild(el('<header class="top"><div class="tinfo"><div class="t1">가온누리 전자계약 · 관리자</div>' +
+    '<div class="t2">' + (opening ? '관리자 화면으로 들어가는 중입니다' : '관리자 PIN 4자리를 입력해 주세요') + '</div></div></header>'));
+  if (opening) {
+    app.appendChild(el('<div class="wrap"><div class="card" style="padding:26px 16px;text-align:center">' +
+      '<div class="spin" style="margin:0 auto"></div>' +
+      '<div class="muted small" style="margin-top:12px">이 기기에서 자동으로 로그인하고 있습니다…</div></div></div>'));
+    return;
+  }
   var wrap = el('<div class="wrap"><div class="card" style="padding:20px 16px">' +
     '<div class="pindots"><i></i><i></i><i></i><i></i></div>' +
     '<div class="pinpad">' +
     [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return '<button data-n="' + n + '">' + n + '</button>'; }).join('') +
     '<button data-act="del">←</button><button data-n="0">0</button><button data-act="ok">확인</button>' +
     '</div><div class="muted small" id="pinmsg" style="text-align:center;margin-top:14px;min-height:18px"></div>' +
+    '<div class="muted small" id="pinremember" style="text-align:center;margin-top:2px;color:#8b939b">이 기기에서는 다음부터 PIN 입력 없이 열립니다 · [나가기]로 해제</div>' +
     '</div></div>');
   app.appendChild(wrap);
   var buf = '', busy = false;
   var dots = wrap.querySelectorAll('.pindots i');
   function paint() { dots.forEach(function (d, i) { d.className = i < buf.length ? 'on' : ''; }); }
   function msg(t) { $('#pinmsg').textContent = t; }
+  if (msg0) msg(msg0);
   function submitPin() {
     if (busy) return;
     if (buf.length !== 4) { msg('4자리를 입력해 주세요'); return; }
     busy = true; msg('확인 중…');
-    api({ action: 'login', pin: buf }).then(function (r) {
+    var pin = buf;
+    api({ action: 'login', pin: pin }).then(function (r) {
       busy = false;
       if (r.ok) {
-        SID = r.sid; sessionStorage.setItem(SIDKEY, SID);
+        SID = r.sid;
+        try { sessionStorage.setItem(SIDKEY, SID); } catch (e) {}
+        savePin(pin);                       // 자동로그인용 저장 (나가기 때 지움)
         busy = false;
         if (r.list) return renderDash(r.list);
         return api({ action: 'list', sid: SID }).then(function (l) {
@@ -1398,7 +1503,7 @@ function renderDash(list) {
   var wrap = el('<div id="adminbody"></div>');
   app.appendChild(wrap);
   head.querySelector('#logout').addEventListener('click', function () {
-    SID = ''; sessionStorage.removeItem(SIDKEY); showPin();
+    clearLogin(); showPin('');          // 저장된 자동로그인도 함께 해제
   });
   head.querySelector('#newBtn').addEventListener('click', function () { renderCreate(); });
   var wait = list.filter(function (c) { return c.status !== '완료'; }).length;
@@ -1419,7 +1524,7 @@ function renderDash(list) {
       '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
       '<div class="li-acts">' +
       '<button class="btn kakao" data-share="' + esc(c.token) + '">카톡 배너 보내기</button>' +
-      '<button class="btn gray" data-copy="' + esc(c.token) + '">링크만 복사</button>' +
+      '<a class="btn sms" data-sms="' + esc(c.token) + '" href="' + esc(smsHrefOf(c)) + '"' + smsAttrTitle(c) + '>문자로 보내기</a>' +
       '</div></div>';
   });
   html += '</div></div>';
@@ -1430,9 +1535,7 @@ function renderDash(list) {
   wrap.querySelectorAll('[data-share]').forEach(function (b) {
     b.addEventListener('click', function () { sendKakaoBanner(byToken[b.getAttribute('data-share')]); });
   });
-  wrap.querySelectorAll('[data-copy]').forEach(function (b) {
-    b.addEventListener('click', function () { copyRowLink(byToken[b.getAttribute('data-copy')]); });
-  });
+  bindSmsButtons(wrap, byToken);        // 문자로 보내기 — 기본 문자 앱이 바로 뜹니다
 }
 /* 두 지사 동시 발송 건 묶기: 같은 사람·같은 기간으로 계룡/논산이 10분 안에 만들어졌으면 한 건 */
 function createdMs(s) {
@@ -1454,12 +1557,6 @@ function pairDuoRows(list) {
       if (gap < gapBest) { gapBest = gap; best = o; }
     });
     if (best) { c._t2 = best.token; best._t2 = c.token; used[best.token] = 1; used[c.token] = 1; }
-  });
-}
-function copyRowLink(c) {
-  var link = certLink(c);
-  copyText(link).then(function (ok) {
-    toast(ok ? (c && c._t2 ? '계룡·논산 링크(1개)를 복사했습니다' : '링크를 복사했습니다') : '복사에 실패했습니다.');
   });
 }
 function renderCreate() {
@@ -1580,7 +1677,7 @@ function renderCreate() {
       if (!p.name) { toast('이용자(산모) 성명을 입력해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('서비스 종료일을 선택해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ap)) { toast('변경 적용일을 선택해 주세요'); return; }
-      item = { token: '', type: type, branch: p.branch, name: p.name, start: p.start, end: p.end };
+      item = { token: '', type: type, branch: p.branch, name: p.name, phone: p.phone, start: p.start, end: p.end };
     } else {
       p = {
         action: 'create', sid: SID, type: type,
@@ -1596,7 +1693,7 @@ function renderCreate() {
       if (!p.name) { toast('성명을 입력해 주세요'); return; }
       if (!/^\d{6}-?\d{7}$/.test(p.jumin)) { toast('주민등록번호 형식을 확인해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('계약기간을 YYYY-MM-DD로 입력해 주세요'); return; }
-      item = { token: '', type: type, branch: p.branch, name: p.name, start: p.start, end: p.end };
+      item = { token: '', type: type, branch: p.branch, name: p.name, phone: p.phone, start: p.start, end: p.end };
     }
     this.disabled = true;
     var btn0 = this;
@@ -1607,11 +1704,11 @@ function renderCreate() {
         return api(Object.assign({}, p, { branch: '논산' })).then(function (r2) {
           doneBtn();
           if (!r2 || !r2.ok) {
-            showCreated({ token: r1.token, type: type, branch: '계룡', name: p.name, start: p.start, end: p.end },
+            showCreated({ token: r1.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end },
               '계룡 계약서만 만들어졌습니다. 논산 계약서를 다시 만들어 주세요.');
             return;
           }
-          showCreated({ token: r1.token, _t2: r2.token, type: type, branch: '계룡', name: p.name, start: p.start, end: p.end }, '');
+          showCreated({ token: r1.token, _t2: r2.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end }, '');
         });
       }).catch(function () { doneBtn(); toast('네트워크 오류'); });
       return;
@@ -1624,7 +1721,7 @@ function renderCreate() {
     }).catch(function () { doneBtn(); toast('네트워크 오류'); });
   });
 }
-/* 새 문서 결과 상자 (카톡 배너·링크 복사·안내문 복사) */
+/* 새 문서 결과 상자 (카톡 배너·문자로 보내기·안내문 복사) */
 function showCreated(it, warn) {
   var box = $('#c_result');
   if (!box) return;
@@ -1637,11 +1734,10 @@ function showCreated(it, warn) {
         : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.')) + '</div>' +
     '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
     '<div class="copybtns wrapbtns"><button class="btn kakao" id="c_kakao">카톡 배너 보내기</button>' +
-    '<button class="btn gray" id="c_copy">링크만 복사</button>' +
-    '<button class="btn" id="c_text">문자/카톡 안내문 복사</button></div>';
-  box.querySelector('#c_copy').addEventListener('click', function () {
-    var i = box.querySelector('#c_link'); i.select(); i.setSelectionRange(0, 999);
-    copyText(link).then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다. 길게 눌러 복사해 주세요.'); });
+    '<a class="btn sms" id="c_sms" href="' + esc(smsHrefOf(it)) + '"' + smsAttrTitle(it) + '>문자로 보내기</a>' +
+    '<button class="btn gray" id="c_text">문자/카톡 안내문 복사</button></div>';
+  box.querySelector('#c_sms').addEventListener('click', function () {
+    if (!smsNumber(it)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
   });
   box.querySelector('#c_text').addEventListener('click', function () { copyGuide(it); });
   box.querySelector('#c_kakao').addEventListener('click', function () { sendKakaoBanner(it); });
@@ -1705,8 +1801,8 @@ function openDetail(token, row) {
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
       '<div class="copybtns wrapbtns"><button class="btn kakao" id="d_kakao">카톡 배너 보내기</button>' +
-      '<button class="btn gray" id="d_link">링크만 복사</button>' +
-      (c.status === '완료' ? '' : '<button class="btn" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
+      '<a class="btn sms" id="d_sms" href="' + esc(smsHrefOf(c)) + '"' + smsAttrTitle(c) + '>문자로 보내기</a>' +
+      (c.status === '완료' ? '' : '<button class="btn gray" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
       '<div id="d_sigs" style="margin-top:12px"></div>' +
       '<div style="margin-top:14px"><button class="btn" id="d_pdf">최종 PDF 보기</button></div>' +
       '<div id="d_view" style="margin-top:12px"></div>' +
@@ -1714,9 +1810,8 @@ function openDetail(token, row) {
       '</div></div>');
     document.body.appendChild(sheet);
     sheet.querySelector('#d_close').addEventListener('click', function () { sheet.remove(); });
-    sheet.querySelector('#d_link').addEventListener('click', function () {
-      copyText(certLink(c))
-        .then(function (ok) { toast(ok ? '링크를 복사했습니다' : '복사에 실패했습니다.'); });
+    sheet.querySelector('#d_sms').addEventListener('click', function () {
+      if (!smsNumber(c)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
     });
     var dtext = sheet.querySelector('#d_text');
     if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
