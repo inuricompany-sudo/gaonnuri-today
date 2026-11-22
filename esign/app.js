@@ -5,6 +5,7 @@
      → 글자는 원본과 100% 같은 선명도, 파일은 170KB 내외, 제출 대기 1~2초
    · 공개 저장소에는 개인정보·PIN 없음(테스트는 홍길동)
    · v29: 관리자 자동로그인(localStorage) + [링크만 복사]→[문자로 보내기(sms: URI)]
+   · v32: 수신자에게 보이는 모든 문구·제목에서 지사명 제거(문자 본문·안내문 복사·서명 화면)
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
@@ -331,20 +332,20 @@ function showRecipient(token) {
     app.innerHTML = '<div class="notice err">네트워크 오류로 계약서를 불러오지 못했습니다. 새로고침해 주세요.</div>';
   });
 }
-function showDoneBoth(docs) {            // 두 지사 모두 완료
-  var rows = docs.map(function (d) {
-    return '<div class="kv"><span class="k">' + esc(d.ct.branch) + '지사</span><span class="v">서명 완료' +
+function showDoneBoth(docs) {            // 두 건 모두 완료
+  var rows = docs.map(function (d, i) {
+    return '<div class="kv"><span class="k">' + (i + 1) + '단계 문서</span><span class="v">서명 완료' +
       (d.ct.done ? ' · ' + esc(d.ct.done) : '') + '</span></div>';
   }).join('');
   app.innerHTML = '';
   app.appendChild(el('<div>' +
-    '<header class="top"><div class="tinfo"><div class="t1">' + esc(CT.type || '관리사님 계약서식') + ' (계룡·논산지사)</div>' +
+    '<header class="top"><div class="tinfo"><div class="t1">' + esc(CT.type || '관리사님 계약서식') + '</div>' +
     '<div class="t2">' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:26px 16px">' +
     '<div style="font-size:38px;line-height:1">✅</div>' +
     '<h2 style="margin-top:10px">이미 서명이 완료된 문서입니다</h2>' +
-    '<p class="muted" style="margin:6px 0 0">계룡·논산 계약서 모두 서명이 끝났습니다.</p>' +
+    '<p class="muted" style="margin:6px 0 0">계약서 모두 서명이 끝났습니다.</p>' +
     '</div>' +
     '<div class="card"><h2>계약 내용</h2>' + rows +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
@@ -357,7 +358,7 @@ function showAlreadyDone() {
   app.appendChild(el(
     '<div>' +
     '<header class="top"><div class="tinfo"><div class="t1">' + esc(docTitle()) + '</div>' +
-    '<div class="t2">' + esc(CO.branch || CT.branch) + '지사 · ' + esc(CT.name) + '</div></div></header>' +
+    '<div class="t2">' + esc(CT.name) + '</div></div></header>' +
     '<div class="wrap">' +
     '<div class="card" style="text-align:center;padding:26px 16px">' +
     '<div style="font-size:38px;line-height:1">✅</div>' +
@@ -369,7 +370,6 @@ function showAlreadyDone() {
 }
 function summaryCard() {
   return '<div class="card"><h2>계약 내용</h2>' +
-    '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CO.branch || CT.branch) + '지사</span></div>' +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
     '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '</div>';
@@ -381,11 +381,10 @@ function summaryCard() {
    ============================================================= */
 var CONSENT_OK = false, CONSENT_AT = '';
 
-function docTitle() {
-  if (isClose()) return CT.type || '서비스 종료안내문';
-  return (CT.type || '관리사님 계약서식') + ' (' + (CT.branch || CO.branch || '계룡') + '지사)';
+function docTitle() {                 // 수신자에게 보이는 문서 제목 — 지사명 없이
+  return CT.type || (isClose() ? '서비스 종료안내문' : '관리사님 계약서식');
 }
-function docTitleDuo() { return (CT.type || '관리사님 계약서식') + ' (계룡·논산지사)'; }
+function docTitleDuo() { return docTitle(); }
 function periodLabel() { return isClose() ? '서비스기간' : '계약기간'; }
 function fmtYMD(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function deadlineOf() {   // 문서 제출 기한: 생성일 + 7일
@@ -404,8 +403,8 @@ function showIntro() {
     '<h1>검토할 문서가 도착하였습니다.</h1>' +
     '<p class="lead">' + esc(CT.type || '관리사님 계약서식') + ' 내용을 검토하시고, 작성 후 전송해 주세요.</p>' +
     (DUO ? '<p class="hint" style="color:var(--brand);font-weight:700;line-height:1.6">' +
-      '계룡지사·논산지사 계약서 <b>2건</b>을 한 번에 작성합니다.<br>' +
-      '1단계 계룡 → 2단계 논산 순서로 진행되고, 서명은 <b>한 번만</b> 하시면 두 문서에 모두 적용됩니다.</p>' : '') +
+      '계약서 <b>2건</b>을 한 번에 작성합니다.<br>' +
+      '1단계 → 2단계 순서로 진행되고, 서명은 <b>한 번만</b> 하시면 두 문서에 모두 적용됩니다.</p>' : '') +
     '<p class="hint">아래 <b>문서 검토 및 작성</b> 버튼을 눌러 문서를 검토하세요.</p>' +
     '<p class="deadline' + (late ? ' late' : '') + '">문서 제출 기한은 <b>' + fmtYMD(dl) + '</b>까지입니다.' +
     (late ? '<br>기한이 지났습니다. 담당자에게 문의해 주세요.' : '') + '</p>' +
@@ -497,15 +496,15 @@ function buildRecipientUi() {
   var top = el(
     '<header class="top">' +
     '<div class="tinfo"><div class="t1">' + (DUO ? '<span style="color:var(--brand)">' + STEP + '/' + STEPN + '</span> ' : '') + esc(docTitle()) + '</div>' +
-    '<div class="t2">' + esc(CT.branch || CO.branch) + '지사 · ' + esc(CT.name) + ' · ' + esc(CT.start) + '~' + esc(CT.end) + '</div></div>' +
+    '<div class="t2">' + esc(CT.name) + ' · ' + esc(CT.start) + '~' + esc(CT.end) + '</div></div>' +
     '<div class="zoom"><button data-z="1" class="on">맞춤</button><button data-z="1.5">확대</button><button data-z="2.1">크게</button></div>' +
     '</header>');
   app.appendChild(top);
   if (DUO) {
     app.appendChild(el('<div class="duonote">' +
       (STEP === 1
-        ? '<b>계룡·논산 지사 계약서가 함께 작성됩니다.</b> 공통 1쪽(개인정보 동의·서명)은 한 번만 작성하면 두 계약서에 똑같이 반영됩니다. 서명은 1회만 해 주세요.'
-        : '<b>논산지사 계약서(2단계)</b>입니다. 1쪽은 1단계에서 작성한 내용이 그대로 반영되었습니다. 논산에서 다른 부분만 확인·체크해 주세요.') +
+        ? '<b>계약서 2건이 함께 작성됩니다.</b> 공통 1쪽(개인정보 동의·서명)은 한 번만 작성하면 두 계약서에 똑같이 반영됩니다. 서명은 1회만 해 주세요.'
+        : '<b>2단계 계약서</b>입니다. 1쪽은 1단계에서 작성한 내용이 그대로 반영되었습니다. 다른 부분만 확인·체크해 주세요.') +
       '</div>'));
   }
 
@@ -714,7 +713,7 @@ function updateBar() {
   pips.innerHTML = html;
   var all = done === req.length;
   btn.textContent = all
-    ? (DUO ? (STEP === 1 ? '다음 · 논산 계약서' : '작성 완료 · 2건 제출하기') : '작성 완료 · 제출하기')
+    ? (DUO ? (STEP === 1 ? '다음 · 2단계 계약서' : '작성 완료 · 2건 제출하기') : '작성 완료 · 제출하기')
     : (done === 0 ? '입력 시작' : '다음 항목');
   btn.disabled = !CONSENT_OK;      // 전자서명 동의 전에는 시작할 수 없음
 }
@@ -742,7 +741,7 @@ function goNext() {
 function goStep2() {
   if (_submitting) return;
   _submitting = true;
-  showLoading('1단계 계룡 계약서를 준비하고 있어요', '이어서 논산 계약서가 열립니다. 창을 닫지 말아 주세요');
+  showLoading('1단계 계약서를 준비하고 있어요', '이어서 2단계 계약서가 열립니다. 창을 닫지 말아 주세요');
   var aState = pickState(CT, S), aConsent = CONSENT_AT, aCT = CT, aPages = PAGES.slice(0);
   var t0 = Date.now();
   buildFirstDuoPdf().then(function (outA) {
@@ -756,7 +755,7 @@ function goStep2() {
     hideLoading(); _submitting = false;
     buildRecipientUi();
     window.scrollTo(0, 0);
-    toast('계룡 계약서 완료 · 논산은 다른 부분만 확인하고 서명 없이 제출하면 됩니다');
+    toast('1단계 완료 · 2단계는 다른 부분만 확인하고 서명 없이 제출하면 됩니다');
   }).catch(function (e) {
     hideLoading(); _submitting = false;
     toast('1단계 계약서를 준비하지 못했습니다. 다시 시도해 주세요');
@@ -787,12 +786,12 @@ function afterSignApply() {
   var left = reqFields().filter(function (f) { return !isDone(f); });
   if (!left.length) {
     toast(DUO && STEP === 1
-      ? '1단계 서명 완료 · [다음 · 논산 계약서]를 누르면 논산 서명란에도 자동 적용됩니다'
+      ? '1단계 서명 완료 · [다음 · 2단계 계약서]를 누르면 2단계 서명란에도 자동 적용됩니다'
       : '필수 항목을 모두 채웠습니다. 제출해 주세요.');
     return;
   }
   toast(DUO && STEP === 1
-    ? '서명을 서명란 ' + ids.length + '곳에 적용했습니다 (논산 계약서에도 자동 적용)'
+    ? '서명을 서명란 ' + ids.length + '곳에 적용했습니다 (2단계 계약서에도 자동 적용)'
     : '서명을 서명란 ' + ids.length + '곳에 모두 적용했습니다');
   var nf = nextUnfilled();
   if (nf && nf.t === 'check') {
@@ -948,8 +947,7 @@ function openSubmitSheet() {
     '<h3>서명을 제출할까요?</h3>' +
     '<div class="muted small">제출하면 계약서 원본에 입력한 내용과 서명이 그대로 합성되어 저장됩니다.</div>' +
     '<div class="card" style="margin:14px 0 0;padding:12px">' +
-    '<div class="kv"><span class="k">문서</span><span class="v">' + esc(CT.type || '관리사님 계약서식') + (DUO ? ' (계룡 · 논산 2건)' : '') + '</span></div>' +
-    '<div class="kv"><span class="k">지사</span><span class="v">' + esc(DUO ? '계룡 · 논산' : (CT.branch || CO.branch) + '지사') + '</span></div>' +
+    '<div class="kv"><span class="k">문서</span><span class="v">' + esc(CT.type || '관리사님 계약서식') + (DUO ? ' (2건)' : '') + '</span></div>' +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
     '<div class="kv"><span class="k">' + periodLabel() + '</span><span class="v">' + esc(CT.start) + ' ~ ' + esc(CT.end) + '</span></div>' +
     '<div class="kv"><span class="k">서명</span><span class="v">' + (DUO ? '두 문서 서명란에 동시 적용' : req.length + '개 항목 완료') + '</span></div>' +
@@ -973,7 +971,7 @@ function doSubmit() {
   if (_submitting) return;
   _submitting = true;
   var curCT = CT, curState = pickState(CT, S), curConsent = CONSENT_AT;
-  showLoading(DUO ? '계룡·논산 문서를 저장하고 있어요' : '문서를 저장하고 있어요',
+  showLoading(DUO ? '문서 2건을 저장하고 있어요' : '문서를 저장하고 있어요',
     DUO ? '서명 1장으로 2건을 서버에 저장합니다. 5~10초 걸립니다. 창을 닫지 말아 주세요' : '3~5초면 끝납니다. 창을 닫지 말아 주세요');
   var tStart = Date.now(), tBuild = 0;
   var builder = (DUO && _stepA && _stepA.doc) ? buildSecondPdf(_stepA) : buildFinalPdf();
@@ -1030,8 +1028,8 @@ function doSubmit() {
 }
 
 function showSubmitPartial(results) {      // 두 건 중 한 건만 저장된 경우
-  var rows = results.map(function (x) {
-    return '<div class="kv"><span class="k">' + esc(x.branch) + '지사</span><span class="v">' +
+  var rows = results.map(function (x, i) {
+    return '<div class="kv"><span class="k">' + (i + 1) + '단계 문서</span><span class="v">' +
       (x.ok ? '저장 완료' : '저장 실패' + (x.error ? ' (' + esc(x.error) + ')' : '')) + '</span></div>';
   }).join('');
   app.innerHTML = '';
@@ -1048,12 +1046,12 @@ function showDone(results) {
   var duo = !!(results && results.length > 1);
   var when = (results && results.length ? results[results.length - 1].doneAt : '') || '';
   var rows = duo
-    ? results.map(function (x) {
-        return '<div class="kv"><span class="k">' + esc(x.branch) + '지사</span><span class="v">서명 완료' +
+    ? results.map(function (x, i) {
+        return '<div class="kv"><span class="k">' + (i + 1) + '단계 문서</span><span class="v">서명 완료' +
           (x.doneAt ? ' · ' + esc(x.doneAt) : '') + '</span></div>';
       }).join('')
-    : '<div class="kv"><span class="k">지사</span><span class="v">' + esc(CT.branch || CO.branch) + '지사</span></div>';
-  var title = duo ? (CT.type || '관리사님 계약서식') + ' (계룡·논산지사)' : docTitle();
+    : '';
+  var title = docTitle();
   app.innerHTML = '';
   app.appendChild(el('<div>' +
     '<header class="top"><div class="tinfo"><div class="t1">' + esc(title) + '</div>' +
@@ -1062,7 +1060,7 @@ function showDone(results) {
     '<div class="card" style="text-align:center;padding:28px 16px">' +
     '<div style="font-size:40px;line-height:1">✅</div>' +
     '<h2 style="margin-top:10px">서명이 완료되었습니다</h2>' +
-    '<p class="muted" style="margin:6px 0 0">' + esc(when) + ' (KST)' + (duo ? ' · 계룡·논산 2건 저장' : '') + '</p>' +
+    '<p class="muted" style="margin:6px 0 0">' + esc(when) + ' (KST)' + (duo ? ' · 2건 저장' : '') + '</p>' +
     '</div>' +
     '<div class="card"><h2>계약 내용</h2>' + rows +
     '<div class="kv"><span class="k">성명</span><span class="v">' + esc(CT.name) + '</span></div>' +
@@ -1344,7 +1342,7 @@ function smsBodyOf(c) {
       '링크는 본인만 사용하실 수 있도록 다른 분께 공유하지 말아 주세요.';
   }
   return '[가온누리산후도우미]\n' + who + ', 안녕하세요.\n' +
-    '관리사님 계약서식(' + branchLabelOf(c) + '지사) 검토와 전자서명을 부탁드립니다.' +
+    '관리사님 계약서식 검토와 전자서명을 부탁드립니다.' +
     (period ? '\n계약기간: ' + period : '') + '\n\n' +
     '▶ 문서 확인·서명하기\n' + link + '\n\n' +
     '링크는 본인만 사용하실 수 있도록 다른 분께 공유하지 말아 주세요.';
@@ -1764,9 +1762,8 @@ function copyText(text) {
   return Promise.resolve(fallback());
 }
 function guideTextOf(c) {
-  var branch = branchLabelOf(c);
   var link = certLink(c);
-  var title = isCloseType(c) ? (c.type || '서비스 종료안내문') : (c.type || '관리사님 계약서식') + ' (' + branch + '지사)';
+  var title = isCloseType(c) ? (c.type || '서비스 종료안내문') : (c.type || '관리사님 계약서식');
   return '[전자계약] 서명 요청이 왔습니다.\n\n' +
     '▶ 문서 제목\n' + title + '\n\n' +
     '▶ 보낸 사람\n가온누리산후도우미\n\n' +
