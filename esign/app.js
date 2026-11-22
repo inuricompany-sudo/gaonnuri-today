@@ -1317,7 +1317,7 @@ function clearLogin() { clearSession(); clearSavedPin(); }   // [나가기] — 
    · JavaScript 키는 카카오 JS SDK용 공개 키입니다(등록한 도메인에서만 동작).
    · Admin 키·REST API 키·Client Secret은 이 파일에 넣지 않습니다. */
 var KAKAO_JS_KEY = 'd9c778f46f68a0f4e86b5b5e88b5a859';
-var KAKAO_IMG = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png';
+var KAKAO_IMG = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og.png?v=2';   // v2: 배너 이미지에서 지사명 제거(카톡 캐시 방지용 쿼리)
 var KAKAO_IMG_CLOSE = 'https://inuricompany-sudo.github.io/gaonnuri-today/esign/og_close.png';   // 종료안내문 전용 배너
 function shareUrlOf(c) { return certLink(c); }
 function duoLinkOf(a, b) {
@@ -1372,13 +1372,12 @@ function kakaoInit() {
 function kakaoBannerPayload(c) {
   var link = certLink(c);
   var typeLabel = isCloseType(c) ? '서비스 종료안내문' : (c.type || '관리사님 계약서식');
-  var branch = c._t2 ? '계룡·논산지사' : (c.branch ? c.branch + '지사' : '');
-  var who = c.name ? c.name + '님' : '수신자';
+  var who = c.name ? c.name + '님' : '수신자';      // 배너에는 지사명(계룡지사·논산지사)을 넣지 않는다
   return {
     objectType: 'feed',
     content: {
       title: '[가온누리산후도우미] 검토할 문서가 도착했습니다',
-      description: '[' + typeLabel + (branch ? ' · ' + branch : '') + '] ' +
+      description: '[' + typeLabel + '] ' +
         who + ', 문서를 확인하고 전자서명을 진행해 주세요.',
       imageUrl: isCloseType(c) ? KAKAO_IMG_CLOSE : KAKAO_IMG,
       imageWidth: 1200,
