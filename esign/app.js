@@ -50,7 +50,7 @@ function pad2(n) { return (n < 10 ? '0' : '') + n; }
 var MASK_D = /[0-9]/;
 function onlyDigits(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
 
-/* 전화번호: 01020480548 → 010-2048-0548 / 0421234567 → 042-123-4567
+/* 전화번호: 01012345678 → 010-1234-5678 / 0421234567 → 042-123-4567
    0212345678 → 02-1234-5678 / 021234567 → 02-123-4567 (숫자 최대 11자리) */
 function fmtPhone(v) {
   var d = onlyDigits(v).slice(0, 11);
