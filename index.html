@@ -248,6 +248,9 @@
     .pbadge.ok{background:#e8f3e6;color:#2e6b2e}
     .pbadge.wait{background:#fdf3e0;color:#8a5300}
     .pbadge.none{background:#f1f3f0;color:#8a8f8a}
+    /* v31.2: 예정 산모 정렬 방향 토글 — 헤더 오른쪽 작은 단추 */
+    .psort{margin-left:auto;flex:0 0 auto;font-size:10.5px;font-weight:800;color:#5b4a8f;background:#f4f1fb;
+      border:1px solid #ded7f2;border-radius:999px;padding:2px 8px;line-height:1.6;white-space:nowrap}
     /* v30: 탭 단추는 이름만 (날짜 없음) — 한 줄로 조금 더 크게 */
     .daynav .dbtn{padding:9px 2px}
     .daynav .dbtn .dt{font-size:13px;font-weight:800;color:#2f3532}
@@ -873,7 +876,9 @@
 
     /* ── v31: 예정 화면 — 폴라리스 통합시트 예정 산모 ──────────────────
        김정현님 폴라리스 '2026년 통합시트'를 옮긴 [예정산모] 탭을 서버가 읽어
-       days.upcoming.polarisUpcoming 으로 내려 줍니다. (오늘 이후 시작만 · 시작일 내림차순)
+       days.upcoming.polarisUpcoming 으로 내려 줍니다. (오늘 이후 시작만)
+       v31.2: 화면에서 정렬합니다. 기본은 시작일 오름차순(가까운 순),
+              헤더 오른쪽 단추로 내림차순(먼 순)과 전환합니다.
        폰 한 화면에 여러 명이 들어오도록 한 명을 두 줄로 줄여 그립니다.
          이름 · 기간        시작일(YY.MM.DD)
          관리사              바우처 · 계약서 · 예약금 배지 */
@@ -908,18 +913,32 @@
         '</div>' +
       '</div>';
     }
+    var POLARIS_ASC = true;                   // v31.2: 기본값은 항상 오름차순 (앱을 다시 열면 초기화)
     function polarisSection(data) {
       var list = (data.polarisUpcoming || []).slice(0);
       if (!list.length) return '';            // 예정 산모가 없으면 그리지 않습니다
-      list.sort(function (a, b) {             // 서버 정렬을 한 번 더 (같은 날은 받은 순서 유지)
-        if (a.start === b.start) return 0;
-        return a.start < b.start ? 1 : -1;
+      list.sort(function (a, b) {             // 시작일 기준 (같은 날은 받은 순서 유지)
+        var x = String(a.start == null ? '' : a.start), y = String(b.start == null ? '' : b.start);
+        if (x === y) return 0;
+        var c = x < y ? -1 : 1;
+        return POLARIS_ASC ? c : -c;
       });
-      var h = '<section class="tsec"><div class="thead">' +
+      var h = '<section class="tsec" id="polarisSec"><div class="thead">' +
         '<span class="ttl polaris">📋 예정 산모 (' + list.length + '명)</span>' +
-        '<span class="tsub">통합시트 · 시작 늦은 순</span></div>';
+        '<span class="tsub">통합시트</span>' +
+        '<button class="psort" id="polarisSort" title="눌러서 정렬 방향 바꾸기">' +
+          (POLARIS_ASC ? '가까운 순 ⇅' : '먼 순 ⇅') + '</button></div>';
       for (var i = 0; i < list.length; i++) h += polarisRowHtml(list[i]);
       return h + '</section>';
+    }
+    /* v31.2: 정렬 단추 — 목록만 다시 그려 화면 위치(스크롤)를 유지합니다. */
+    function togglePolarisSort() {
+      POLARIS_ASC = !POLARIS_ASC;
+      var el = document.getElementById('polarisSec');
+      if (!el || !DATA) return;
+      var tmp = document.createElement('div');
+      tmp.innerHTML = polarisSection(DATA);
+      if (tmp.firstChild) el.parentNode.replaceChild(tmp.firstChild, el);
     }
 
     /* ── v23: 탭 이동 (종료 / 오늘 / 예정) ──────────────────────────
@@ -1366,6 +1385,9 @@
     }
 
     document.addEventListener('click', function (ev) {
+      // v31.2: 예정 산모 정렬 방향 전환
+      var sbtn = ev.target.closest ? ev.target.closest('#polarisSort') : null;
+      if (sbtn) { togglePolarisSort(); return; }
       // v20: 보기 전용에서는 체크박스를 눌러도 상태가 바뀌지 않고 안내만 합니다.
       var rochk = ev.target.closest ? ev.target.closest('.chk.ro') : null;
       if (rochk && !isAdmin_()) { ev.preventDefault(); toast(VIEWER_MSG); return; }
