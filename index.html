@@ -243,11 +243,12 @@
     .pcard .psub{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
     .pcard .pcare{flex:1 1 auto;min-width:0;font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis}
-    /* v31.3: 배지 4개는 항상 한 줄(고정폭·가운데 정렬) — 관리사명이 길면 그쪽만 말줄임.
-       고정폭 66px·간격 3px = 4개 273px, 나머지가 관리사 영역이라 폰 폭에서 같이 들어갑니다.
+    /* v31.3: 배지 4개는 항상 한 줄(고정폭 58px·가운데 정렬) — 관리사명이 길면 그쪽만 말줄임.
+       배지 최대 글자(예 '바우처 대기') 자연 폭 54px → 58px 로 여유를 두고,
+       4개 232px + 간격 9px = 241px, 나머지가 관리사 영역이라 폰 폭에서 같이 들어갑니다.
        모든 카드에서 바우처·계약서·예약금·자부담 위치가 세로 일렬로 맞습니다. */
     .pcard .pbadges{display:flex;flex:0 0 auto;flex-wrap:nowrap;gap:3px}
-    .pbadge{flex:0 0 66px;width:66px;font-size:10px;font-weight:700;border-radius:6px;padding:1px 2px;
+    .pbadge{flex:0 0 58px;width:58px;font-size:10px;font-weight:700;border-radius:6px;padding:1px 2px;
       line-height:1.5;white-space:nowrap;text-align:center}
     .pbadge.ok{background:#e8f3e6;color:#2e6b2e}
     .pbadge.wait{background:#fdf3e0;color:#8a5300}
