@@ -231,6 +231,23 @@
     .sumcard.amber{background:#fbf7ee;border-color:#eee3cd}
     .sumcard.edu{background:#f6f8fc;border-color:#dfe6f3}
     .sumcard.edu .snum{color:#2f4f8f}
+    /* ── v31: 예정 화면 — 폴라리스 통합시트 예정 산모 (한 줄 요약) ── */
+    .thead .ttl.polaris{color:#5b4a8f}
+    .prow{background:#fff;border:1px solid #e8eae6;border-radius:11px;padding:7px 9px;margin:0 10px 5px}
+    .prow .p1{display:flex;align-items:baseline;gap:6px;min-width:0}
+    .prow .pn{font-size:13.5px;font-weight:700;color:#202124;white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+    .prow .pk{font-size:11px;font-weight:700;color:#5f6368;white-space:nowrap}
+    .prow .pd{margin-left:auto;font-size:12px;font-weight:800;color:#2f4f8f;
+      font-variant-numeric:tabular-nums;white-space:nowrap}
+    .prow .p2{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
+    .prow .pc{font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+    .prow .pbs{display:flex;gap:4px;margin-left:auto;flex:0 0 auto}
+    .pbg{font-size:10px;font-weight:700;border-radius:6px;padding:1px 5px;line-height:1.5;white-space:nowrap}
+    .pbg.ok{background:#e8f3e6;color:#2e6b2e}
+    .pbg.wait{background:#fdf3e0;color:#8a5300}
+    .pbg.none{background:#f1f3f0;color:#8a8f8a}
     /* v30: 탭 단추는 이름만 (날짜 없음) — 한 줄로 조금 더 크게 */
     .daynav .dbtn{padding:9px 2px}
     .daynav .dbtn .dt{font-size:13px;font-weight:800;color:#2f3532}
@@ -766,7 +783,8 @@
         html = endSumHtml(data) + closeDocsHtml(data);
       } else if (VIEW.isFuture) {
         // v30.1: 시작 예정 · 계속 진행 인원 요약은 유지, 교육대기는 v29 상세 카드로 복구 (예찬님 지시)
-        html = planSumHtml(data) + eduSection(data);
+        // v31: 요약 카드 아래에 폴라리스 통합시트 예정 산모 목록, 교육대기는 맨 뒤 (예찬님 지시)
+        html = planSumHtml(data) + polarisSection(data) + eduSection(data);
       } else if (!data.items || !data.items.length) {
         // v28: 주말(토·일)은 캘린더 기간을 무시하고 실제 근무표 기록만 보므로, 비어 있는 게 정상입니다.
         html = IS_WEEKEND
@@ -851,6 +869,57 @@
         '</div>';
 
       return h + '</section>';   // v30.1: 교육대기 숫자 카드는 빼고, 뒤에 v29 상세 카드를 붙입니다
+    }
+
+    /* ── v31: 예정 화면 — 폴라리스 통합시트 예정 산모 ──────────────────
+       김정현님 폴라리스 '2026년 통합시트'를 옮긴 [예정산모] 탭을 서버가 읽어
+       days.upcoming.polarisUpcoming 으로 내려 줍니다. (오늘 이후 시작만 · 시작일 내림차순)
+       폰 한 화면에 여러 명이 들어오도록 한 명을 두 줄로 줄여 그립니다.
+         이름 · 기간        시작일(YY.MM.DD)
+         관리사              바우처 · 계약서 · 예약금 배지 */
+    function pDate_(s) {                      // 'YYYY-MM-DD' → 'YY.MM.DD'
+      s = String(s == null ? '' : s);
+      return s.length >= 10 ? (s.slice(2, 4) + '.' + s.slice(5, 7) + '.' + s.slice(8, 10)) : s;
+    }
+    function pTerm_(m) {                      // 기간 '15' → '15일', '2달(입주)' → 그대로
+      m = String(m == null ? '' : m).trim();
+      if (!m) return '';
+      return /^\d+$/.test(m) ? (m + '일') : m;
+    }
+    function pBadge_(label, v) {
+      var t = String(v == null ? '' : v).trim();
+      var k = (t === '완료') ? 'ok' : (t ? 'wait' : 'none');
+      return '<span class="pbg ' + k + '">' + esc(label + ' ' + (t || '-')) + '</span>';
+    }
+    function polarisRowHtml(p) {
+      var care = String(p.care == null ? '' : p.care).trim();
+      var term = pTerm_(p.months);
+      return '<div class="prow">' +
+        '<div class="p1">' +
+          '<span class="pn">' + esc(p.name) + '</span>' +
+          (term ? '<span class="pk">' + esc(term) + '</span>' : '') +
+          '<span class="pd">' + esc(pDate_(p.start)) + '</span>' +
+        '</div>' +
+        '<div class="p2">' +
+          '<span class="pc">' + esc(care || '관리사 미정') + '</span>' +
+          '<span class="pbs">' +
+            pBadge_('바우처', p.voucher) + pBadge_('계약서', p.contract) + pBadge_('예약금', p.deposit) +
+          '</span>' +
+        '</div>' +
+      '</div>';
+    }
+    function polarisSection(data) {
+      var list = (data.polarisUpcoming || []).slice(0);
+      if (!list.length) return '';            // 예정 산모가 없으면 그리지 않습니다
+      list.sort(function (a, b) {             // 서버 정렬을 한 번 더 (같은 날은 받은 순서 유지)
+        if (a.start === b.start) return 0;
+        return a.start < b.start ? 1 : -1;
+      });
+      var h = '<section class="tsec"><div class="thead">' +
+        '<span class="ttl polaris">📋 예정 산모 (' + list.length + '명)</span>' +
+        '<span class="tsub">통합시트 · 시작 늦은 순</span></div>';
+      for (var i = 0; i < list.length; i++) h += polarisRowHtml(list[i]);
+      return h + '</section>';
     }
 
     /* ── v23: 탭 이동 (종료 / 오늘 / 예정) ──────────────────────────
