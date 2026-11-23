@@ -233,21 +233,21 @@
     .sumcard.edu .snum{color:#2f4f8f}
     /* ── v31: 예정 화면 — 폴라리스 통합시트 예정 산모 (한 줄 요약) ── */
     .thead .ttl.polaris{color:#5b4a8f}
-    .prow{background:#fff;border:1px solid #e8eae6;border-radius:11px;padding:7px 9px;margin:0 10px 5px}
-    .prow .p1{display:flex;align-items:baseline;gap:6px;min-width:0}
-    .prow .pn{font-size:13.5px;font-weight:700;color:#202124;white-space:nowrap;overflow:hidden;
+    .pcard{background:#fff;border:1px solid #e8eae6;border-radius:11px;padding:7px 9px;margin:0 10px 5px}
+    .pcard .pmain{display:flex;align-items:baseline;gap:6px;min-width:0}
+    .pcard .pname{font-size:13.5px;font-weight:700;color:#202124;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis;flex:0 1 auto;min-width:0}
-    .prow .pk{font-size:11px;font-weight:700;color:#5f6368;white-space:nowrap}
-    .prow .pd{margin-left:auto;font-size:12px;font-weight:800;color:#2f4f8f;
+    .pcard .pterm{font-size:11px;font-weight:700;color:#5f6368;white-space:nowrap;flex:0 0 auto}
+    .pcard .pdate{margin-left:auto;flex:0 0 auto;font-size:12px;font-weight:800;color:#2f4f8f;
       font-variant-numeric:tabular-nums;white-space:nowrap}
-    .prow .p2{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
-    .prow .pc{font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
+    .pcard .psub{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
+    .pcard .pcare{font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis;flex:0 1 auto;min-width:0}
-    .prow .pbs{display:flex;gap:4px;margin-left:auto;flex:0 0 auto}
-    .pbg{font-size:10px;font-weight:700;border-radius:6px;padding:1px 5px;line-height:1.5;white-space:nowrap}
-    .pbg.ok{background:#e8f3e6;color:#2e6b2e}
-    .pbg.wait{background:#fdf3e0;color:#8a5300}
-    .pbg.none{background:#f1f3f0;color:#8a8f8a}
+    .pcard .pbadges{display:flex;gap:4px;margin-left:auto;flex:0 0 auto}
+    .pbadge{font-size:10px;font-weight:700;border-radius:6px;padding:1px 5px;line-height:1.5;white-space:nowrap}
+    .pbadge.ok{background:#e8f3e6;color:#2e6b2e}
+    .pbadge.wait{background:#fdf3e0;color:#8a5300}
+    .pbadge.none{background:#f1f3f0;color:#8a8f8a}
     /* v30: 탭 단추는 이름만 (날짜 없음) — 한 줄로 조금 더 크게 */
     .daynav .dbtn{padding:9px 2px}
     .daynav .dbtn .dt{font-size:13px;font-weight:800;color:#2f3532}
@@ -889,20 +889,20 @@
     function pBadge_(label, v) {
       var t = String(v == null ? '' : v).trim();
       var k = (t === '완료') ? 'ok' : (t ? 'wait' : 'none');
-      return '<span class="pbg ' + k + '">' + esc(label + ' ' + (t || '-')) + '</span>';
+      return '<span class="pbadge ' + k + '">' + esc(label + ' ' + (t || '-')) + '</span>';
     }
     function polarisRowHtml(p) {
       var care = String(p.care == null ? '' : p.care).trim();
       var term = pTerm_(p.months);
-      return '<div class="prow">' +
-        '<div class="p1">' +
-          '<span class="pn">' + esc(p.name) + '</span>' +
-          (term ? '<span class="pk">' + esc(term) + '</span>' : '') +
-          '<span class="pd">' + esc(pDate_(p.start)) + '</span>' +
+      return '<div class="pcard">' +
+        '<div class="pmain">' +
+          '<span class="pname">' + esc(p.name) + '</span>' +
+          (term ? '<span class="pterm">' + esc(term) + '</span>' : '') +
+          '<span class="pdate">' + esc(pDate_(p.start)) + '</span>' +
         '</div>' +
-        '<div class="p2">' +
-          '<span class="pc">' + esc(care || '관리사 미정') + '</span>' +
-          '<span class="pbs">' +
+        '<div class="psub">' +
+          '<span class="pcare">' + esc(care || '관리사 미정') + '</span>' +
+          '<span class="pbadges">' +
             pBadge_('바우처', p.voucher) + pBadge_('계약서', p.contract) + pBadge_('예약금', p.deposit) +
           '</span>' +
         '</div>' +
