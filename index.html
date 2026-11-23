@@ -243,7 +243,8 @@
     .pcard .psub{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
     .pcard .pcare{font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis;flex:0 1 auto;min-width:0}
-    .pcard .pbadges{display:flex;gap:4px;margin-left:auto;flex:0 0 auto}
+    .pcard .pbadges{display:flex;gap:4px;margin-left:auto;flex:0 1 auto;flex-wrap:wrap;
+      justify-content:flex-end;row-gap:2px}
     .pbadge{font-size:10px;font-weight:700;border-radius:6px;padding:1px 5px;line-height:1.5;white-space:nowrap}
     .pbadge.ok{background:#e8f3e6;color:#2e6b2e}
     .pbadge.wait{background:#fdf3e0;color:#8a5300}
@@ -879,9 +880,11 @@
        days.upcoming.polarisUpcoming 으로 내려 줍니다. (오늘 이후 시작만)
        v31.2: 화면에서 정렬합니다. 기본은 시작일 오름차순(가까운 순),
               헤더 오른쪽 단추로 내림차순(먼 순)과 전환합니다.
+       v31.3: 자부담 배지를 추가하고([예정산모] H열 → 서버 selfPay), 배지 4개가
+              폰 한 줄에 들어가도록 합니다. 바우처가 '논산'·'계룡'이면 등록 완료와 같은 초록.
        폰 한 화면에 여러 명이 들어오도록 한 명을 두 줄로 줄여 그립니다.
          이름 · 기간        시작일(YY.MM.DD)
-         관리사              바우처 · 계약서 · 예약금 배지 */
+         관리사              바우처 · 계약서 · 예약금 · 자부담 배지 */
     function pDate_(s) {                      // 'YYYY-MM-DD' → 'YY.MM.DD'
       s = String(s == null ? '' : s);
       return s.length >= 10 ? (s.slice(2, 4) + '.' + s.slice(5, 7) + '.' + s.slice(8, 10)) : s;
@@ -893,7 +896,9 @@
     }
     function pBadge_(label, v) {
       var t = String(v == null ? '' : v).trim();
-      var k = (t === '완료') ? 'ok' : (t ? 'wait' : 'none');
+      /* v31.3: '완료' 외에 바우처 등록 지역이 적힌 값('논산'·'계룡' 등)도 등록 완료(초록)로 봅니다.
+         대기=주황, 없음·빈칸=회색('-' 로 표시) */
+      var k = (t === '완료' || /논산|계룡/.test(t)) ? 'ok' : (t ? 'wait' : 'none');
       return '<span class="pbadge ' + k + '">' + esc(label + ' ' + (t || '-')) + '</span>';
     }
     function polarisRowHtml(p) {
@@ -909,6 +914,7 @@
           '<span class="pcare">' + esc(care || '관리사 미정') + '</span>' +
           '<span class="pbadges">' +
             pBadge_('바우처', p.voucher) + pBadge_('계약서', p.contract) + pBadge_('예약금', p.deposit) +
+            pBadge_('자부담', p.selfPay) +
           '</span>' +
         '</div>' +
       '</div>';
