@@ -210,6 +210,7 @@
     .bg{font-size:11px;font-weight:700;border-radius:8px;padding:2px 7px;line-height:1.5;white-space:nowrap}
     .bg.ok{background:#e8f3e6;color:#2e6b2e}
     .bg.miss{background:#fdecea;color:#B3261E}
+    .bg.wait{background:#fdf3e0;color:#8a5300}   /* v33: 전자서명 앱 링크를 보내고 서명을 기다림 */
     .cdnote{margin-top:5px;font-size:10.5px;color:#9aa09a;line-height:1.45}
 
     /* ── v30: 종료·예정 화면 — 인원 요약 카드 ── */
@@ -1049,9 +1050,11 @@
       return st.text || (st.done ? '완료' : '미발송');
     }
     /* v30.1: 종료 서류 상세 — v23(v26) 을 그대로 되돌려 놓았습니다. */
+    /* v33: 종료안내문은 전자서명 앱과 연동 — 링크를 보내고 서명을 기다리는 건은 주황 '서명대기' */
     function badgeHtml(label, st) {
       var done = !!(st && st.done);
-      return '<span class="bg ' + (done ? 'ok' : 'miss') + '">' + esc(label) + ' ' + esc(sendText_(st)) + '</span>';
+      var wait = !!(st && st.state === 'wait');
+      return '<span class="bg ' + (done ? 'ok' : (wait ? 'wait' : 'miss')) + '">' + esc(label) + ' ' + esc(sendText_(st)) + '</span>';
     }
     function closeDocsHtml(data) {
       var cd = data.closeDocs || [];

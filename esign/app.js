@@ -6,6 +6,9 @@
    · 공개 저장소에는 개인정보·PIN 없음(테스트는 홍길동)
    · v29: 관리자 자동로그인(localStorage) + [링크만 복사]→[문자로 보내기(sms: URI)]
    · v32: 수신자에게 보이는 모든 문구·제목에서 지사명 제거(문자 본문·안내문 복사·서명 화면)
+   · v33: 종료안내문은 지사 공통 문서 — 관리자 작성 화면에서 계룡/논산 선택을 없애고,
+          관리자 목록·상세에서도 종료안내문 건에는 지사 표시를 하지 않습니다.
+          (관리사 계약서식은 지사별 서식이 달라 그대로 둡니다)
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
@@ -1513,9 +1516,9 @@ function renderDash(list) {
   list.forEach(function (c) {
     html += '<div class="list-row">' +
       '<div class="list-item" data-token="' + esc(c.token) + '">' +
-      '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') + ' <span class="chip br">' + esc(c.branch) + '</span>' +
-      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>' : '') +
-      (c._t2 ? ' <span class="chip duo">계룡+논산</span>' : '') + '</div>' +
+      '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') +
+      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>'
+        : ' <span class="chip br">' + esc(c.branch) + '</span>' + (c._t2 ? ' <span class="chip duo">계룡+논산</span>' : '')) + '</div>' +
       '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
       '<div class="r"><span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span>' +
       '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
@@ -1578,8 +1581,8 @@ function renderCreate() {
       '<div class="formrow"><label>관리사 주소</label><input id="c_addr" placeholder="예: 대전광역시 유성구 대학로 99, 101동 1001호"></div>' +
     '</div>' +
     '<div id="form_close" class="hidden">' +
-      '<div class="g2"><div class="formrow"><label>지사</label><select id="x_branch"><option>계룡</option><option>논산</option></select></div>' +
-      '<div class="formrow"><label>이용자(산모) 성명</label><input id="x_name" placeholder="예: 윤슬기"></div></div>' +
+      '<div class="formrow"><label>이용자(산모) 성명</label><input id="x_name" placeholder="예: 윤슬기"></div>' +
+      '<div class="muted small" style="margin:-4px 0 10px 2px">서비스 종료안내문은 계룡·논산 공통 문서입니다.</div>' +
       '<div class="g2"><div class="formrow"><label>연락처</label><input id="x_phone" placeholder="010-0000-0000" inputmode="numeric" autocomplete="off"></div>' +
       '<div class="formrow"><label>제공인력(관리사)</label><input id="x_worker" placeholder="예: 김용미"></div></div>' +
       '<div class="g2"><div class="formrow"><label>서비스 시작일</label><input id="x_start" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD"></div>' +
@@ -1656,7 +1659,6 @@ function renderCreate() {
       var pe = jm(en), pa = jm(ap);
       p = {
         action: 'create', sid: SID, type: type,
-        branch: cv('x_branch'),
         name: cv('x_name'),
         phone: cv('x_phone'),
         start: st, end: en,
@@ -1674,7 +1676,7 @@ function renderCreate() {
       if (!p.name) { toast('이용자(산모) 성명을 입력해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('서비스 종료일을 선택해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ap)) { toast('변경 적용일을 선택해 주세요'); return; }
-      item = { token: '', type: type, branch: p.branch, name: p.name, phone: p.phone, start: p.start, end: p.end };
+      item = { token: '', type: type, branch: '', name: p.name, phone: p.phone, start: p.start, end: p.end };
     } else {
       p = {
         action: 'create', sid: SID, type: type,
@@ -1782,7 +1784,7 @@ function openDetail(token, row) {
     var c = r.item;
     if (row && row._t2) c._t2 = row._t2;
     var sheet = el('<div class="sheet"><div class="panel" style="max-height:92vh;overflow:auto">' +
-      '<h3>' + esc(c.name) + ' · ' + esc(branchLabelOf(c)) + '지사</h3>' +
+      '<h3>' + esc(c.name) + (isCloseType(c) ? '' : ' · ' + esc(branchLabelOf(c)) + '지사') + '</h3>' +
       '<div class="muted small">' + esc(c.type || '') + ' · ' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span></div>' +
       '<div class="card" style="margin:14px 0 0;padding:12px">' +
       (isCloseType(c)
