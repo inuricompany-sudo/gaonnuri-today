@@ -897,8 +897,8 @@
     function pBadge_(label, v) {
       var t = String(v == null ? '' : v).trim();
       /* v31.3: '완료' 외에 바우처 등록 지역이 적힌 값('논산'·'계룡' 등)도 등록 완료(초록)로 봅니다.
-         대기=주황, 없음·빈칸=회색('-' 로 표시) */
-      var k = (t === '완료' || /논산|계룡/.test(t)) ? 'ok' : (t ? 'wait' : 'none');
+         대기=주황, '없음'·빈칸=회색(빈칸은 '-' 로 표시) */
+      var k = (t === '완료' || /논산|계룡/.test(t)) ? 'ok' : ((t && t !== '없음') ? 'wait' : 'none');
       return '<span class="pbadge ' + k + '">' + esc(label + ' ' + (t || '-')) + '</span>';
     }
     function polarisRowHtml(p) {
