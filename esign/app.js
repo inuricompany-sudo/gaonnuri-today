@@ -9,6 +9,10 @@
    · v33: 종료안내문은 지사 공통 문서 — 관리자 작성 화면에서 계룡/논산 선택을 없애고,
           관리자 목록·상세에서도 종료안내문 건에는 지사 표시를 하지 않습니다.
           (관리사 계약서식은 지사별 서식이 달라 그대로 둡니다)
+   · v34(2026-11-24): 상태 3단계 — 대기(작성만 함) / 발송(카톡·문자로 보냄) / 완료(서명·드라이브 저장 확인).
+          관리자 목록·상세에서 [대기 ↔ 발송] 토글, 상단 필터 탭(대기·발송·완료·전체),
+          보내기 전 미리보기(수신자 화면 그대로), 목록에서 삭제(확인창),
+          작성 화면에 '회신받을 이메일'(선택) — 서명 완료 PDF를 그 메일로도 자동 발송.
    ============================================================= */
 var API = 'https://script.google.com/macros/s/AKfycbxNkgjaS8ERq4ZYywNroxxsROdofkLe6HEzxQDRnFSraBJGu0yKoXAEE5zc0ZpcI5G8/exec';
 var CONTRACT_PDF = 'contract.pdf';
@@ -514,12 +518,14 @@ function buildRecipientUi() {
   var wrap = el('<div class="docwrap" id="docwrap"><div class="pages" id="pages"></div></div>');
   app.appendChild(wrap);
 
+  if (!PREVIEW) {
   var bar = el(
     '<div class="bottombar" id="bar">' +
     '<div class="prog"><div class="pl" id="pl">필수 입력 항목 <span>(0/' + reqFields().length + ')</span></div><div class="pips" id="pips"></div></div>' +
     '<button id="nextBtn">입력 시작</button>' +
     '</div>');
   app.appendChild(bar);
+  }
   app.appendChild(el('<div class="loading" id="load"><div class="spin"></div><div>원본 계약서를 불러오는 중입니다…</div></div>'));
 
   Promise.all(PAGES.map(function (p) { return pageImage(p); })).then(function (imgs) {
@@ -537,6 +543,7 @@ function buildRecipientUi() {
     var l = $('#load'); if (l) l.remove();
     layoutDoc();
     updateBar();
+    if (PREVIEW) { bindZoom(); return; }      // 미리보기에서는 제출 준비·입력 연결을 하지 않습니다
     bindUi();
     if (SIG_ONE) {          // 2단계 문서에는 1단계 서명을 그대로 적용
       signFieldIds().forEach(function (id) { S.signs[id] = SIG_ONE; paintSignNode(id, SIG_ONE); });
@@ -694,6 +701,11 @@ function bindUi() {
     }
     goNext();
   });
+  bindZoom();
+  var rt;
+  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layoutDoc, 120); });
+}
+function bindZoom() {
   document.querySelectorAll('.zoom button').forEach(function (b) {
     b.addEventListener('click', function () {
       document.querySelectorAll('.zoom button').forEach(function (x) { x.classList.remove('on'); });
@@ -701,8 +713,6 @@ function bindUi() {
       layoutDoc();
     });
   });
-  var rt;
-  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layoutDoc, 120); });
 }
 
 function updateBar() {
@@ -1289,8 +1299,24 @@ function buildFirstDuoPdf() {          // 1단계: 문서 객체를 남겨 두 �
 
 /* ---------------- 관리자 ---------------- */
 var SID = '';
+var _lastList = [];        // 현재 목록(상태 토글·삭제 후 다시 그릴 때 사용)
 try { SID = sessionStorage.getItem(SIDKEY) || ''; } catch (e) {}
 function isCloseType(c) { return /종료/.test((c && c.type) || ''); }
+/* v34: 상태 3단계 — 대기 / 발송 / 완료 (예전 자료에 빈 값이면 대기로 봅니다) */
+var FILTER = '대기';        // 관리자 목록 필터 탭: 대기 · 발송 · 완료 · 전체
+var PREVIEW = false;        // 미리보기 모드 — 수신자 화면을 읽기 전용으로 그림
+var _realApp = null;        // 미리보기에서 잠시 바꾼 app 컨테이너를 되돌리기 위해
+function stOf(c) {
+  var s = String((c && c.status) || '');
+  return (s === '완료' || s === '발송') ? s : '대기';
+}
+function chipClsOf(c) {
+  var s = stOf(c);
+  return s === '완료' ? 'done' : (s === '발송' ? 'sent' : 'wait');
+}
+function toggleLabel(c) { return stOf(c) === '발송' ? '대기로' : '발송으로'; }
+/* 두 지사 동시 발송 건은 두 행이 함께 움직입니다 */
+function tokensOf(c) { return (c && c._t2) ? [c.token, c._t2] : [c.token]; }
 
 /* ---------------- 자동로그인 저장소 (이 기기) ---------------- */
 function ls_() { try { return window.localStorage; } catch (e) { return null; } }
@@ -1354,12 +1380,13 @@ function smsHrefOf(c) { return 'sms:' + smsNumber(c) + '?body=' + encodeURICompo
 function smsAttrTitle(c) {
   return smsNumber(c) ? '' : ' title="연락처가 비어 있어 문자 앱에서 받는 사람을 직접 고르셔야 합니다"';
 }
-function bindSmsButtons(root, byToken) {
+function bindSmsButtons(root, byToken, onSend) {
   root.querySelectorAll('[data-sms]').forEach(function (a) {
     a.addEventListener('click', function (e) {
       e.stopPropagation();                                  // 목록 행 클릭(상세 열기)으로 번지지 않게
       var c = byToken && byToken[a.getAttribute('data-sms')];
       if (c && !smsNumber(c)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
+      if (c && onSend) onSend(c);                          // v34: 문자 앱을 열면 '발송'으로 표시
     });
   });
 }
@@ -1389,12 +1416,14 @@ function kakaoBannerPayload(c) {
   };
 }
 function sendKakaoBanner(c) {
-  if (!c || !c.token) { toast('보낼 문서를 찾지 못했습니다'); return; }
-  if (!kakaoInit()) { toast('카카오 공유를 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.'); return; }
+  if (!c || !c.token) { toast('보낼 문서를 찾지 못했습니다'); return false; }
+  if (!kakaoInit()) { toast('카카오 공유를 준비하지 못했습니다. 새로고침 후 다시 시도해 주세요.'); return false; }
   try {
     Kakao.Share.sendDefault(kakaoBannerPayload(c));
+    return true;
   } catch (e) {
     toast('카톡 공유를 열지 못했습니다: ' + ((e && (e.message || e)) || ''));
+    return false;
   }
 }
 function showAdmin() {
@@ -1492,7 +1521,100 @@ function showPin(msg0, opening) {
     });
   });
 }
+/* ---------------- v34: 상태 토글 · 삭제 · 미리보기 ---------------- */
+/* 같은 목록 안에 두 지사 행이 따로 들어오므로 token으로도 맞춰 둡니다 */
+function setStatusLocal(tokens, st) {
+  _lastList.forEach(function (x) { if (tokens.indexOf(x.token) >= 0) x.status = st; });
+}
+function toggleStatus(c) {
+  if (!c) return;
+  var target = stOf(c) === '발송' ? '대기' : '발송';
+  var tokens = tokensOf(c);
+  Promise.all(tokens.map(function (t) {
+    return api({ action: 'setstatus', sid: SID, token: t, status: target });
+  })).then(function (rs) {
+    var bad = rs.filter(function (r) { return !r || !r.ok; })[0];
+    if (bad) {
+      toast(bad.error === 'already_done' ? '완료된 문서는 상태를 바꿀 수 없습니다' : '상태를 바꾸지 못했습니다');
+      refreshList();
+      return;
+    }
+    tokens.forEach(function (t) { setStatusLocal(tokens, target); });
+    c.status = target;
+    toast(target === '발송' ? '발송으로 표시했습니다' : '대기로 되돌렸습니다');
+    renderDash(_lastList);
+  }).catch(function () { toast('네트워크 오류'); });
+}
+/* 문자·카톡 버튼을 눌렀을 때 대기 → 발송 (잘못됐으면 [대기로]로 되돌립니다) */
+function markSent(c) {
+  if (!c || stOf(c) !== '대기') return;
+  var tokens = tokensOf(c);
+  Promise.all(tokens.map(function (t) {
+    return api({ action: 'setstatus', sid: SID, token: t, status: '발송' }).catch(function () { return { ok: false }; });
+  })).then(function (rs) {
+    if (!rs || !rs.length || !rs[0] || !rs[0].ok) return;
+    c.status = '발송';
+    setStatusLocal(tokens, '발송');
+    toast('발송으로 표시했습니다 · 보내지 않았다면 [대기로]를 누르세요');
+    if (!PREVIEW) renderDash(_lastList);
+  });
+}
+function deleteContract(c, onDone) {
+  if (!c) return;
+  var tokens = tokensOf(c);
+  var msg = '목록에서 삭제할까요?\n\n' + (c.name || '') + ' · ' + (c.type || '') + ' · ' + stOf(c);
+  if (tokens.length > 1) msg += '\n(계룡·논산 두 건이 함께 삭제됩니다)';
+  if (stOf(c) === '완료') msg += '\n\n완료된 문서입니다. 드라이브의 서명본 PDF 파일은 지우지 않고 그대로 남습니다.';
+  msg += '\n\n삭제한 기록은 되돌릴 수 없습니다.';
+  if (!confirm(msg)) return;
+  Promise.all(tokens.map(function (t) {
+    return api({ action: 'del', sid: SID, token: t }).catch(function () { return { ok: false }; });
+  })).then(function (rs) {
+    var okAll = rs.every(function (r) { return r && r.ok; });
+    _lastList = _lastList.filter(function (x) { return tokens.indexOf(x.token) < 0; });
+    toast(okAll ? '삭제했습니다' : '일부만 삭제됐습니다 — 새로고침해 주세요');
+    renderDash(_lastList);
+    if (onDone) onDone(okAll);
+  }).catch(function () { toast('네트워크 오류'); });
+}
+
+/* 보내기 전 미리보기 — 수신자가 실제로 보게 될 문서 화면을 그대로(읽기 전용) 보여 줍니다 */
+function openPreview(token) {
+  api({ action: 'detail', sid: SID, token: token }).then(function (r) {
+    if (!r.ok) { toast('미리보기를 불러오지 못했습니다'); return; }
+    var c = r.item;
+    var host = el('<div class="sheet pvsheet" id="pvsheet"><div class="panel pvpanel">' +
+      '<div class="pvhead"><div style="flex:1;min-width:0">' +
+      '<div class="pvtitle">미리보기 · 수신자 화면</div>' +
+      '<div class="muted small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+      esc(c.name) + ' · ' + esc(c.type || '') + ' · 서명 전 확인용</div></div>' +
+      '<button class="btn gray pvclose" id="pvclose">닫기</button></div>' +
+      '<div class="pvbody" id="pvbody"></div></div></div>');
+    document.body.appendChild(host);
+    host.querySelector('#pvclose').addEventListener('click', closePreview);
+
+    _realApp = app;
+    PREVIEW = true;
+    app = host.querySelector('#pvbody');
+    DUO = null; SIG_ONE = ''; STEP = 1; STEPN = 1; _stepA = null;
+    S = { checks: c.checks || {}, signs: {}, opts: c.opts || {}, texts: c.texts || {}, filledFirst: false };
+    CONSENT_OK = true; CONSENT_AT = '';
+    applyDoc({ ct: c, co: {} });
+    buildRecipientUi();
+    setTimeout(layoutDoc, 80);
+  }).catch(function () { toast('네트워크 오류'); });
+}
+function closePreview() {
+  PREVIEW = false;
+  var host = document.getElementById('pvsheet'); if (host) host.remove();
+  var back = _realApp || document.getElementById('app');
+  app = back;
+  _realApp = null;
+  CT = null; CO = null;
+  renderDash(_lastList);
+}
 function renderDash(list) {
+  _lastList = list || [];
   kakaoInit();
   pairDuoRows(list);
   app.innerHTML = '';
@@ -1506,36 +1628,78 @@ function renderDash(list) {
     clearLogin(); showPin('');          // 저장된 자동로그인도 함께 해제
   });
   head.querySelector('#newBtn').addEventListener('click', function () { renderCreate(); });
-  var wait = list.filter(function (c) { return c.status !== '완료'; }).length;
+  var nWait = 0, nSent = 0, nDone = 0;
+  list.forEach(function (c) {
+    var s = stOf(c);
+    if (s === '완료') nDone++; else if (s === '발송') nSent++; else nWait++;
+  });
+  var tabs = [['대기', nWait], ['발송', nSent], ['완료', nDone], ['전체', list.length]];
+  if (FILTER !== '발송' && FILTER !== '완료' && FILTER !== '전체') FILTER = '대기';
+  var shown = FILTER === '전체' ? list : list.filter(function (c) { return stOf(c) === FILTER; });
   var html = '<div class="wrap" style="padding-bottom:30px">' +
-    '<div class="muted small" style="margin:0 0 8px 2px">대기 ' + wait + ' · 완료 ' + (list.length - wait) + ' · 전체 ' + list.length + '</div>';
+    '<div class="ftabs">' + tabs.map(function (t) {
+      return '<button class="ftab' + (t[0] === FILTER ? ' on' : '') + '" data-f="' + t[0] + '">' +
+        t[0] + ' <b>' + t[1] + '</b></button>';
+    }).join('') + '</div>';
   if (!list.length) html += '<div class="card"><div class="muted">아직 만든 계약이 없습니다. [+ 새 계약]으로 링크를 만들어 주세요.</div></div>';
+  else if (!shown.length) html += '<div class="card"><div class="muted">' + FILTER + ' 상태의 문서가 없습니다.</div></div>';
   var byToken = {};
   list.forEach(function (c) { byToken[c.token] = c; });
-  html += '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden">';
-  list.forEach(function (c) {
-    html += '<div class="list-row">' +
-      '<div class="list-item" data-token="' + esc(c.token) + '">' +
-      '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') +
-      (isCloseType(c) ? ' <span class="chip close">종료안내문</span>'
-        : ' <span class="chip br">' + esc(c.branch) + '</span>' + (c._t2 ? ' <span class="chip duo">계룡+논산</span>' : '')) + '</div>' +
-      '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
-      '<div class="r"><span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span>' +
-      '<div class="s">' + esc((c.status === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
-      '<div class="li-acts">' +
-      '<button class="btn kakao" data-share="' + esc(c.token) + '">카톡 배너 보내기</button>' +
-      '<a class="btn sms" data-sms="' + esc(c.token) + '" href="' + esc(smsHrefOf(c)) + '"' + smsAttrTitle(c) + '>문자로 보내기</a>' +
-      '</div></div>';
-  });
-  html += '</div></div>';
+  if (shown.length) {
+    html += '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden">';
+    shown.forEach(function (c) {
+      var st = stOf(c);
+      html += '<div class="list-row">' +
+        '<div class="list-item" data-token="' + esc(c.token) + '">' +
+        '<div style="flex:1;min-width:0"><div class="n">' + esc(c.name || '(이름 없음)') +
+        (isCloseType(c) ? ' <span class="chip close">종료안내문</span>'
+          : ' <span class="chip br">' + esc(c.branch) + '</span>' + (c._t2 ? ' <span class="chip duo">계룡+논산</span>' : '')) + '</div>' +
+        '<div class="s">' + esc(c.start || '') + ' ~ ' + esc(c.end || '') + '</div></div>' +
+        '<div class="r"><span class="chip ' + chipClsOf(c) + '">' + st + '</span>' +
+        '<div class="s">' + esc((st === '완료' ? c.done : c.created) || '').slice(5, 16) + '</div></div></div>' +
+        '<div class="li-acts">' +
+        '<button class="btn gray sm" data-prev="' + esc(c.token) + '">미리보기</button>' +
+        (st === '완료' ? '' : '<button class="btn tog' + (st === '발송' ? ' back' : '') + '" data-tog="' + esc(c.token) + '">' + toggleLabel(c) + '</button>') +
+        '<a class="btn sms sm" data-sms="' + esc(c.token) + '" href="' + esc(smsHrefOf(c)) + '"' + smsAttrTitle(c) + '>문자</a>' +
+        '<button class="btn kakao sm" data-share="' + esc(c.token) + '">카톡</button>' +
+        '<button class="btn del sm" data-del="' + esc(c.token) + '">삭제</button>' +
+        '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
   wrap.innerHTML = html;
+  wrap.querySelectorAll('.ftab').forEach(function (b) {
+    b.addEventListener('click', function () { FILTER = b.getAttribute('data-f'); renderDash(list); });
+  });
   wrap.querySelectorAll('.list-item').forEach(function (n) {
     n.addEventListener('click', function () { openDetail(n.getAttribute('data-token'), byToken[n.getAttribute('data-token')]); });
   });
   wrap.querySelectorAll('[data-share]').forEach(function (b) {
-    b.addEventListener('click', function () { sendKakaoBanner(byToken[b.getAttribute('data-share')]); });
+    b.addEventListener('click', function () {
+      var c = byToken[b.getAttribute('data-share')];
+      if (sendKakaoBanner(c)) markSent(c);     // 카톡 배너를 열었으면 발송으로 표시
+    });
   });
-  bindSmsButtons(wrap, byToken);        // 문자로 보내기 — 기본 문자 앱이 바로 뜹니다
+  wrap.querySelectorAll('[data-tog]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleStatus(byToken[b.getAttribute('data-tog')]);
+    });
+  });
+  wrap.querySelectorAll('[data-prev]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openPreview(b.getAttribute('data-prev'));
+    });
+  });
+  wrap.querySelectorAll('[data-del]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      deleteContract(byToken[b.getAttribute('data-del')]);
+    });
+  });
+  bindSmsButtons(wrap, byToken, markSent);   // 문자로 보내기 — 기본 문자 앱이 바로 뜨고, 발송으로 표시
 }
 /* 두 지사 동시 발송 건 묶기: 같은 사람·같은 기간으로 계룡/논산이 10분 안에 만들어졌으면 한 건 */
 function createdMs(s) {
@@ -1597,6 +1761,9 @@ function renderCreate() {
       '<div class="g2"><div class="formrow"><label>변경 적용일</label><input id="x_apply" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD"></div>' +
       '<div class="formrow"><label>메모(선택)</label><input id="x_memo" placeholder=""></div></div>' +
     '</div>' +
+    '<div class="formrow" style="margin-top:14px"><label>회신받을 이메일 (선택)</label>' +
+    '<input id="c_mail" type="email" inputmode="email" autocomplete="off" placeholder="예: name@example.com">' +
+    '<div class="muted small" style="margin:4px 0 0 2px;line-height:1.5">비워두면 드라이브(정리필요)에만 저장합니다. 적으면 서명이 끝났을 때 완성된 PDF를 이 이메일로도 보내 드립니다.</div></div>' +
     '<div style="margin-top:16px"><button class="btn" id="c_ok">링크 만들기</button></div>' +
     '<div id="c_result" style="margin-top:12px"></div>' +
     '</div><button class="btn ghost" id="c_back">목록으로</button></div>';
@@ -1659,6 +1826,7 @@ function renderCreate() {
       var pe = jm(en), pa = jm(ap);
       p = {
         action: 'create', sid: SID, type: type,
+        mail: cv('c_mail'),
         name: cv('x_name'),
         phone: cv('x_phone'),
         start: st, end: en,
@@ -1676,10 +1844,11 @@ function renderCreate() {
       if (!p.name) { toast('이용자(산모) 성명을 입력해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('서비스 종료일을 선택해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ap)) { toast('변경 적용일을 선택해 주세요'); return; }
-      item = { token: '', type: type, branch: '', name: p.name, phone: p.phone, start: p.start, end: p.end };
+      item = { token: '', type: type, branch: '', name: p.name, phone: p.phone, start: p.start, end: p.end, mail: p.mail };
     } else {
       p = {
         action: 'create', sid: SID, type: type,
+        mail: cv('c_mail'),
         branch: cv('c_branch'),
         name: cv('c_name'),
         jumin: cv('c_jumin'),
@@ -1692,8 +1861,10 @@ function renderCreate() {
       if (!p.name) { toast('성명을 입력해 주세요'); return; }
       if (!/^\d{6}-?\d{7}$/.test(p.jumin)) { toast('주민등록번호 형식을 확인해 주세요'); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end)) { toast('계약기간을 YYYY-MM-DD로 입력해 주세요'); return; }
-      item = { token: '', type: type, branch: p.branch, name: p.name, phone: p.phone, start: p.start, end: p.end };
+      item = { token: '', type: type, branch: p.branch, name: p.name, phone: p.phone, start: p.start, end: p.end, mail: p.mail };
     }
+    var mailChk = cv('c_mail');
+    if (mailChk && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mailChk)) { toast('회신받을 이메일 주소를 확인해 주세요'); return; }
     this.disabled = true;
     var btn0 = this;
     var doneBtn = function () { if (btn0) btn0.disabled = false; };
@@ -1703,11 +1874,11 @@ function renderCreate() {
         return api(Object.assign({}, p, { branch: '논산' })).then(function (r2) {
           doneBtn();
           if (!r2 || !r2.ok) {
-            showCreated({ token: r1.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end },
+            showCreated({ token: r1.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end, mail: p.mail },
               '계룡 계약서만 만들어졌습니다. 논산 계약서를 다시 만들어 주세요.');
             return;
           }
-          showCreated({ token: r1.token, _t2: r2.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end }, '');
+          showCreated({ token: r1.token, _t2: r2.token, type: type, branch: '계룡', name: p.name, phone: p.phone, start: p.start, end: p.end, mail: p.mail }, '');
         });
       }).catch(function () { doneBtn(); toast('네트워크 오류'); });
       return;
@@ -1730,7 +1901,9 @@ function showCreated(it, warn) {
     (warn ? '<b style="color:var(--danger)">' + esc(warn) + '</b><br>' : '') +
     (cl ? '종료안내문 링크가 만들어졌습니다. 산모님께 링크를 보내 주세요.'
       : (it._t2 ? '계룡·논산 계약서 2건이 만들어졌습니다. <b>링크 1개</b>로 두 문서를 함께 서명받습니다.'
-        : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.')) + '</div>' +
+        : '계약 링크가 만들어졌습니다. 관리사님께 링크를 보내 주세요.')) +
+    (it.mail ? '<br>서명이 끝나면 완성된 PDF를 <b>' + esc(it.mail) + '</b>으로도 발송합니다(드라이브 저장은 그대로).'
+      : '<br>회신 이메일을 비워 두어 드라이브(정리필요)에만 저장합니다.') + '</div>' +
     '<div class="copyrow"><input id="c_link" readonly value="' + esc(link) + '"></div>' +
     '<div class="copybtns wrapbtns"><button class="btn kakao" id="c_kakao">카톡 배너 보내기</button>' +
     '<a class="btn sms" id="c_sms" href="' + esc(smsHrefOf(it)) + '"' + smsAttrTitle(it) + '>문자로 보내기</a>' +
@@ -1785,7 +1958,7 @@ function openDetail(token, row) {
     if (row && row._t2) c._t2 = row._t2;
     var sheet = el('<div class="sheet"><div class="panel" style="max-height:92vh;overflow:auto">' +
       '<h3>' + esc(c.name) + (isCloseType(c) ? '' : ' · ' + esc(branchLabelOf(c)) + '지사') + '</h3>' +
-      '<div class="muted small">' + esc(c.type || '') + ' · ' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + (c.status === '완료' ? 'done' : 'wait') + '">' + esc(c.status) + '</span></div>' +
+      '<div class="muted small">' + esc(c.type || '') + ' · ' + esc(c.start) + ' ~ ' + esc(c.end) + ' · <span class="chip ' + chipClsOf(c) + '" id="d_chip">' + stOf(c) + '</span></div>' +
       '<div class="card" style="margin:14px 0 0;padding:12px">' +
       (isCloseType(c)
         ? '<div class="kv"><span class="k">이용유형</span><span class="v">' + esc((c.prefill || {}).voucher || '-') + ((c.prefill || {}).term ? ' · ' + esc(c.prefill.term) : '') + '</span></div>' +
@@ -1794,13 +1967,18 @@ function openDetail(token, row) {
         : '<div class="kv"><span class="k">주민번호</span><span class="v">' + esc(c.jumin || '-') + '</span></div>' +
           '<div class="kv"><span class="k">주소</span><span class="v">' + esc(c.address || '-') + '</span></div>') +
       '<div class="kv"><span class="k">연락처</span><span class="v">' + esc(c.phone || '-') + '</span></div>' +
+      '<div class="kv"><span class="k">회신 이메일</span><span class="v">' + esc(c.mail || '-') + '</span></div>' +
       (c._t2 ? '<div class="kv"><span class="k">발송</span><span class="v">계룡·논산 동시 발송 · 링크 1개</span></div>' : '') +
       '<div class="kv"><span class="k">생성</span><span class="v">' + esc(c.created || '-') + '</span></div>' +
       '<div class="kv"><span class="k">완료</span><span class="v">' + esc(c.done || '-') + '</span></div>' +
       '</div>' +
       '<div class="copybtns wrapbtns"><button class="btn kakao" id="d_kakao">카톡 배너 보내기</button>' +
       '<a class="btn sms" id="d_sms" href="' + esc(smsHrefOf(c)) + '"' + smsAttrTitle(c) + '>문자로 보내기</a>' +
-      (c.status === '완료' ? '' : '<button class="btn gray" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
+      (stOf(c) === '완료' ? '' : '<button class="btn gray" id="d_text">문자/카톡 안내문 복사</button>') + '</div>' +
+      '<div class="copybtns wrapbtns" style="margin-top:8px">' +
+      '<button class="btn gray" id="d_prev">미리보기</button>' +
+      (stOf(c) === '완료' ? '' : '<button class="btn tog' + (stOf(c) === '발송' ? ' back' : '') + '" id="d_tog">' + toggleLabel(c) + '</button>') +
+      '<button class="btn del" id="d_del">삭제</button></div>' +
       '<div id="d_sigs" style="margin-top:12px"></div>' +
       '<div style="margin-top:14px"><button class="btn" id="d_pdf">최종 PDF 보기</button></div>' +
       '<div id="d_view" style="margin-top:12px"></div>' +
@@ -1810,10 +1988,34 @@ function openDetail(token, row) {
     sheet.querySelector('#d_close').addEventListener('click', function () { sheet.remove(); });
     sheet.querySelector('#d_sms').addEventListener('click', function () {
       if (!smsNumber(c)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
+      markSent(c);
     });
     var dtext = sheet.querySelector('#d_text');
     if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
-    sheet.querySelector('#d_kakao').addEventListener('click', function () { sendKakaoBanner(c); });
+    sheet.querySelector('#d_kakao').addEventListener('click', function () {
+      if (sendKakaoBanner(c)) markSent(c);
+    });
+    sheet.querySelector('#d_prev').addEventListener('click', function () { sheet.remove(); openPreview(token); });
+    var dtog = sheet.querySelector('#d_tog');
+    if (dtog) dtog.addEventListener('click', function () {
+      var target = stOf(c) === '발송' ? '대기' : '발송';
+      Promise.all(tokensOf(c).map(function (t) {
+        return api({ action: 'setstatus', sid: SID, token: t, status: target }).catch(function () { return { ok: false }; });
+      })).then(function (rs) {
+        if (!rs[0] || !rs[0].ok) { toast('상태를 바꾸지 못했습니다'); return; }
+        c.status = target;
+        setStatusLocal(tokensOf(c), target);
+        var chip = sheet.querySelector('#d_chip');
+        if (chip) { chip.className = 'chip ' + chipClsOf(c); chip.textContent = target; }
+        dtog.textContent = toggleLabel(c);
+        dtog.className = 'btn tog' + (target === '발송' ? ' back' : '');
+        toast(target === '발송' ? '발송으로 표시했습니다' : '대기로 되돌렸습니다');
+        renderDash(_lastList);
+      });
+    });
+    sheet.querySelector('#d_del').addEventListener('click', function () {
+      deleteContract(c, function () { sheet.remove(); });
+    });
     if (c.signs) {
       var h = '<div class="muted small" style="margin-bottom:6px">서명</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
       Object.keys(c.signs).forEach(function (id) {
