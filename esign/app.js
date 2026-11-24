@@ -1546,16 +1546,17 @@ function toggleStatus(c) {
   }).catch(function () { toast('네트워크 오류'); });
 }
 /* 문자·카톡 버튼을 눌렀을 때 대기 → 발송 (잘못됐으면 [대기로]로 되돌립니다) */
-function markSent(c) {
-  if (!c || stOf(c) !== '대기') return;
+function markSent(c, onDone) {
+  if (!c || stOf(c) !== '대기') { if (onDone) onDone(); return; }
   var tokens = tokensOf(c);
   Promise.all(tokens.map(function (t) {
     return api({ action: 'setstatus', sid: SID, token: t, status: '발송' }).catch(function () { return { ok: false }; });
   })).then(function (rs) {
-    if (!rs || !rs.length || !rs[0] || !rs[0].ok) return;
+    if (!rs || !rs.length || !rs[0] || !rs[0].ok) { if (onDone) onDone(); return; }
     c.status = '발송';
     setStatusLocal(tokens, '발송');
     toast('발송으로 표시했습니다 · 보내지 않았다면 [대기로]를 누르세요');
+    if (onDone) onDone();
     if (!PREVIEW) renderDash(_lastList);
   });
 }
@@ -1986,14 +1987,20 @@ function openDetail(token, row) {
       '</div></div>');
     document.body.appendChild(sheet);
     sheet.querySelector('#d_close').addEventListener('click', function () { sheet.remove(); });
+    function paintChip() {
+      var chip = sheet.querySelector('#d_chip');
+      if (chip) { chip.className = 'chip ' + chipClsOf(c); chip.textContent = stOf(c); }
+      var tg = sheet.querySelector('#d_tog');
+      if (tg) { tg.textContent = toggleLabel(c); tg.className = 'btn tog' + (stOf(c) === '발송' ? ' back' : ''); }
+    }
     sheet.querySelector('#d_sms').addEventListener('click', function () {
       if (!smsNumber(c)) toast('연락처가 없습니다. 문자 앱에서 받는 사람을 골라 주세요.');
-      markSent(c);
+      markSent(c, paintChip);
     });
     var dtext = sheet.querySelector('#d_text');
     if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
     sheet.querySelector('#d_kakao').addEventListener('click', function () {
-      if (sendKakaoBanner(c)) markSent(c);
+      if (sendKakaoBanner(c)) markSent(c, paintChip);
     });
     sheet.querySelector('#d_prev').addEventListener('click', function () { sheet.remove(); openPreview(token); });
     var dtog = sheet.querySelector('#d_tog');
@@ -2005,10 +2012,7 @@ function openDetail(token, row) {
         if (!rs[0] || !rs[0].ok) { toast('상태를 바꾸지 못했습니다'); return; }
         c.status = target;
         setStatusLocal(tokensOf(c), target);
-        var chip = sheet.querySelector('#d_chip');
-        if (chip) { chip.className = 'chip ' + chipClsOf(c); chip.textContent = target; }
-        dtog.textContent = toggleLabel(c);
-        dtog.className = 'btn tog' + (target === '발송' ? ' back' : '');
+        paintChip();
         toast(target === '발송' ? '발송으로 표시했습니다' : '대기로 되돌렸습니다');
         renderDash(_lastList);
       });
@@ -2016,7 +2020,7 @@ function openDetail(token, row) {
     sheet.querySelector('#d_del').addEventListener('click', function () {
       deleteContract(c, function () { sheet.remove(); });
     });
-    if (c.signs) {
+    if (c.signs && Object.keys(c.signs).length) {
       var h = '<div class="muted small" style="margin-bottom:6px">서명</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
       Object.keys(c.signs).forEach(function (id) {
         h += '<div class="sigbox" style="flex:1;min-width:90px"><img src="' + c.signs[id] + '" alt="서명"></div>';
