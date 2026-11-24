@@ -1546,7 +1546,7 @@ function toggleStatus(c) {
   }).catch(function () { toast('네트워크 오류'); });
 }
 /* 문자·카톡 버튼을 눌렀을 때 대기 → 발송 (잘못됐으면 [대기로]로 되돌립니다) */
-function markSent(c, onDone) {
+function markSent(c, onDone, msg) {
   if (!c || stOf(c) !== '대기') { if (onDone) onDone(); return; }
   var tokens = tokensOf(c);
   Promise.all(tokens.map(function (t) {
@@ -1555,7 +1555,7 @@ function markSent(c, onDone) {
     if (!rs || !rs.length || !rs[0] || !rs[0].ok) { if (onDone) onDone(); return; }
     c.status = '발송';
     setStatusLocal(tokens, '발송');
-    toast('발송으로 표시했습니다 · 보내지 않았다면 [대기로]를 누르세요');
+    toast(msg || '발송으로 표시했습니다 · 보내지 않았다면 [대기로]를 누르세요');
     if (onDone) onDone();
     if (!PREVIEW) renderDash(_lastList);
   });
@@ -1947,9 +1947,10 @@ function guideTextOf(c) {
     '▶ 문서 서명하기\n' + link + '\n\n' +
     '*본 메시지와 링크는 외부에 공유되지 않도록 주의해 주세요.';
 }
-function copyGuide(c) {
+function copyGuide(c, onDone) {
   return copyText(guideTextOf(c)).then(function (ok) {
     toast(ok ? '안내문을 복사했습니다. 카톡·문자에 붙여넣어 보내세요.' : '복사에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    if (ok && onDone) onDone();
   });
 }
 function openDetail(token, row) {
@@ -1998,7 +1999,11 @@ function openDetail(token, row) {
       markSent(c, paintChip);
     });
     var dtext = sheet.querySelector('#d_text');
-    if (dtext) dtext.addEventListener('click', function () { copyGuide(c); });
+    if (dtext) dtext.addEventListener('click', function () {
+      copyGuide(c, function () {
+        markSent(c, paintChip, '안내문을 복사했습니다 · 발송으로 표시했어요(아니면 [대기로])');
+      });
+    });
     sheet.querySelector('#d_kakao').addEventListener('click', function () {
       if (sendKakaoBanner(c)) markSent(c, paintChip);
     });
