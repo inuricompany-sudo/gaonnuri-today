@@ -288,6 +288,38 @@
     @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}
       60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
     .shake{animation:shake .32s}
+
+    /* ── v34: [종료] 탭 하단 — 자동화 ON/OFF (관리자 PIN 에서만 보입니다) ── */
+    .autosec{margin:12px 10px 16px;background:#fff;border:1px solid #e8eae6;border-radius:12px;padding:10px 12px 8px}
+    .autosec .ahead{font-size:12.5px;font-weight:700;color:#1f3d18;letter-spacing:-.01em}
+    .autosec .asub{font-size:10.5px;color:#70757a;margin:2px 0 6px}
+    .aurow{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f1f3f0}
+    .aurow:first-of-type{border-top:0}
+    .aurow .an{flex:1 1 auto;min-width:0}
+    .aurow .an b{display:block;font-size:12.5px;font-weight:600;color:#202124}
+    .aurow .an span{display:block;font-size:10.5px;color:#70757a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .autog{flex:0 0 auto;width:44px;height:25px;border-radius:13px;border:1px solid #d7dbd6;background:#eceff0;
+      position:relative;transition:background .15s,border-color .15s;padding:0;cursor:pointer}
+    .autog i{position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;
+      box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+    .autog.on{background:#2e7d32;border-color:#2e7d32}
+    .autog.on i{left:21px}
+    .autog[disabled]{opacity:.5}
+    .astamp{margin-top:4px;font-size:10px;color:#9aa0a6;text-align:right}
+
+    /* ── v34: 산모 모달 이름 아래 — 등록된 바우처 지역 ── */
+    .vbadge{display:inline-block;margin:2px 0 2px;font-size:11px;font-weight:700;border-radius:7px;padding:2px 8px;
+      background:#eef4ec;color:#2e6b2e;border:1px solid #d7e5d3}
+    .vbadge.none{background:#f1f3f4;color:#5f6368;border-color:#e3e5e2}
+
+    /* ── v34: 교육 안내 문자 모달 ── */
+    .edudate{display:flex;align-items:center;gap:8px;margin:4px 0 10px;font-size:12.5px;color:#3c4043}
+    .edudate span{flex:0 0 auto;font-weight:700;color:#1f3d18}
+    .edudate input{flex:1 1 auto;min-width:0;border:1px solid #dfe3de;border-radius:9px;padding:7px 9px;font-size:13px;background:#fff;font-family:inherit}
+    .edumsg{width:100%;box-sizing:border-box;border:1px solid #dfe3de;border-radius:10px;padding:10px;font-size:12.5px;
+      line-height:1.55;min-height:196px;resize:vertical;background:#fff;font-family:inherit;color:#202124}
+    .edubtns{display:flex;gap:6px;margin-top:10px}
+    .edubtns .btn{flex:1 1 0;text-align:center}
   </style>
 </head>
 <body>
@@ -389,8 +421,8 @@
     var MSG_KEY = 'gn_card_msg';
     var PIN_KEY = 'gn_pin_v1';
     /* v30: 이 기기에서만 쓰는 '직전 세 탭' 캐시 (공개 파일에는 데이터 없음) */
-    var CACHE_KEY = 'gn_all_v2';
-    var CACHE_KEY_OLD = 'gn_state_v1';        // v19~v29 캐시 — 지울 때 함께 정리
+    var CACHE_KEY = 'gn_all_v3';             // v34: 카드체크 X/Y·바우처가 들어간 새 응답만 그립니다
+    var CACHE_KEY_OLD = 'gn_all_v2';          // v30~v33 캐시 — 지울 때 함께 정리
     /* v30: 종료 · 오늘 · 예정 세 화면을 메모리에 두고 탭 전환은 서버 호출 없이 그립니다. */
     var ALL = { ended: null, today: null, upcoming: null };
     var INDEX = {};                            // 날짜('YYYY-MM-DD') → 그 날 화면 데이터
@@ -789,7 +821,7 @@
       var html = '';
       if (VIEW.isPast) {
         // v30.1: 총 인원 요약 카드는 유지, 종료 서류는 v23~v26 상세 목록으로 복구 (예찬님 지시)
-        html = endSumHtml(data) + closeDocsHtml(data);
+        html = endSumHtml(data) + closeDocsHtml(data) + autoSectionHtml();   // v34: 맨 아래 자동화 ON/OFF (관리자만)
       } else if (VIEW.isFuture) {
         // v30.1: 시작 예정 · 계속 진행 인원 요약은 유지, 교육대기는 v29 상세 카드로 복구 (예찬님 지시)
         // v31: 요약 카드 아래에 폴라리스 통합시트 예정 산모 목록, 교육대기는 맨 뒤 (예찬님 지시)
@@ -825,11 +857,15 @@
         html += tomorrowSection(data);   // v18: 내일 시작 (있을 때만)
       }
       list.innerHTML = html;
+      if (VIEW.isPast && isAdmin_()) loadAutomations(false);   // v34: 자동화 ON/OFF 는 이때만 따로 받습니다
       var cEl = document.getElementById('count');
       if (VIEW.isToday) updateCount();
       else if (cEl) cEl.textContent = VIEW.isPast
-        ? ('종료 ' + sumCare_(data) + '명')
+        ? cardCountText_(data)                       // v34: 어제도 '카드체크 X/Y' (일반 산모는 +N)
         : ('예정 ' + planCare_(data) + '명');
+      // v34: 문자 안내 문구창은 [오늘] 탭에서만 보입니다. (종료·예정 탭에서는 감춥니다)
+      var mbox = document.querySelector('.msgbox');
+      if (mbox) mbox.style.display = VIEW.isToday ? '' : 'none';
       saveCache();   // v30: 세 탭을 이 기기에 저장 (잠그면 지움)
       if (VIEW.isToday && !data.hasTodayColumn) toast(data.sheetName + '에 오늘 날짜 열이 없습니다.');
       else if (VIEW.isPast && data.hasDateColumn === false) toast(data.sheetName + '에 ' + VIEW.short + ' 열이 없습니다.');
@@ -843,15 +879,32 @@
     function sumMoms_(d) { return (d && d.sum && typeof d.sum.mothers === 'number') ? d.sum.mothers : 0; }
     function planCare_(d) { return (d && d.plan) ? ((d.plan.start || 0) + (d.plan.cont || 0)) : 0; }
 
+    /* v34: [종료] 화면 카드체크 — 서버가 센 값(sum.card)을 그대로 씁니다.
+       checked = 근무표에 이름이 적힌 (산모·관리사) 짝, total = 그 날 배정된 짝,
+       normal = 카드체크 대상이 아닌 '일반' 산모 수(화면에는 '+N').
+       쌍둥이는 관리사마다 1개씩 따로 셉니다. */
+    function cardNums_(d) {
+      var c = (d && d.sum && d.sum.card) ? d.sum.card : null;
+      if (!c) return { checked: 0, total: 0, normal: 0 };
+      return { checked: c.checked || 0, total: c.total || 0, normal: c.normal || 0 };
+    }
+    function cardCountText_(d) {
+      var c = cardNums_(d);
+      return '카드체크 ' + c.checked + '/' + c.total + (c.normal ? ' +' + c.normal : '');
+    }
+
     function endSumHtml(data) {
-      var care = sumCare_(data), moms = sumMoms_(data);
-      var sub = care
-        ? ('관리사 기준 · 산모 ' + moms + '명')
-        : (IS_WEEKEND ? '주말은 기본 휴무 · 근무표에 올라온 사람만 셉니다' : '어제 종료한 근무가 없습니다');
+      var c = cardNums_(data);
+      var sub = '';
+      if (!c.total) {
+        sub = IS_WEEKEND ? '주말은 기본 휴무 · 근무표에 올라온 사람만 셉니다' : '어제 카드체크한 근무가 없습니다';
+      } else {
+        sub = (c.normal ? '일반 산모 +' + c.normal + ' · ' : '') + '관리사 기준 (쌍둥이는 각각)';
+      }
       var h = '<section class="sumwrap">' +
         '<div class="sumcard green">' +
-          '<div class="sttl">어제 종료</div>' +
-          '<div class="sumbig"><b>' + care + '</b><span>명</span></div>' +
+          '<div class="sttl">어제 카드체크</div>' +
+          '<div class="sumbig"><b>' + c.checked + '</b><span>/' + c.total + '</span></div>' +
           '<div class="sumsub">' + esc(sub) + '</div>' +
         '</div>';
 
@@ -1021,7 +1074,7 @@
       var doc = '<span class="dnum' + (bad ? ' bad' : '') + '">' + (bad ? '서류 ' + tr.bad : '서류 정상') + '</span>';
       return '<div class="row next edu">' +
         '<div class="mnext">' +
-          '<button class="trname" data-tr="' + idx + '" title="눌러서 서류·전화 확인">' + esc(tr.name) + '</button>' +
+          '<button class="trname" data-edu="' + idx + '" title="눌러서 교육 안내 문자 보기">' + esc(tr.name) + '</button>' +
           '<span class="nextbadge edu">' + esc(whenText_(tr.when)) + '</span>' +
         '</div>' +
         '<span class="line"></span>' +
@@ -1176,6 +1229,8 @@
         boxT.scrollTop = keepT;
         return;
       }
+      // v34: 교육 안내 문자 모달은 스스로 값을 유지합니다. (다시 그리지 않음)
+      if (MODAL.kind === 'edu') return;
       var list = DATA.items || [], idx = -1, i;
       for (i = 0; i < list.length; i++) {
         if (MODAL.kind === 'docs' ? list[i].caregiver === MODAL.key : list[i].mother === MODAL.key) { idx = i; break; }
@@ -1413,6 +1468,14 @@
       if (sms) { sendSms(Number(sms.dataset.sms)); return; }
       var mom = ev.target.closest ? ev.target.closest('.mother[data-mom]') : null;
       if (mom) { syncQuiet(false); openMother(Number(mom.getAttribute('data-mom'))); return; }
+      // v34: 교육대기 이름 → 교육 안내 문자 모달 / 자동화 토글 / 모달 안 단추
+      var edbtn = ev.target.closest ? ev.target.closest('[data-edu]') : null;
+      if (edbtn) { openEdu(Number(edbtn.getAttribute('data-edu'))); return; }
+      var tog = ev.target.closest ? ev.target.closest('.autog[data-auto]') : null;
+      if (tog) { toggleAuto(tog.getAttribute('data-auto'), tog.getAttribute('data-on') !== '1', tog); return; }
+      if (ev.target.id === 'eduCopy') { eduCopy_(); return; }
+      if (ev.target.id === 'eduSms') { eduSms_(); return; }
+      if (ev.target.id === 'eduDocs') { if (EDU.idx >= 0) openTrainee(EDU.idx); return; }
       // v29: 교육대기생 카드 — 서류·전화 모달 (v30.1 복구)
       var trbtn = ev.target.closest ? ev.target.closest('[data-tr]') : null;
       if (trbtn) { openTrainee(Number(trbtn.getAttribute('data-tr'))); return; }
@@ -1482,16 +1545,233 @@
         '<div class="actions">' + drive + tel + '<button class="btn" id="closeModal">닫기</button></div>';
       document.getElementById('modal').classList.add('open');
     }
+    /* ══ v34: [종료] 탭 하단 자동화 ON/OFF ══════════════════════════
+       · 관리자 PIN 일 때만 그립니다. (보기 전용에는 목록 자체를 내려보내지 않습니다)
+       · 첫 화면(loadAll)에는 넣지 않고, [종료] 탭을 열 때 action:'getAutomations' 로 따로 받습니다.
+       · 토글은 action:'toggleAutomation' — 서버가 관리자 PIN 인지 다시 확인합니다. */
+    var AUTOS = null, AUTOS_AT = 0, AUTOS_BUSY = false, AUTOS_GAP = 60000;
+
+    function autoSectionHtml() {
+      if (!isAdmin_()) return '';
+      return '<section class="autosec" id="autoSec">' +
+        '<div class="ahead">⚙️ 자동화 ON/OFF</div>' +
+        '<div class="asub">꺼 두면 그 자동화는 다음 실행부터 건너뜁니다.</div>' +
+        '<div id="autoList">' + autoListHtml() + '</div>' +
+        '<div class="astamp" id="autoStamp"></div>' +
+      '</section>';
+    }
+
+    function autoListHtml() {
+      if (!AUTOS) return '<div class="aurow"><div class="an"><b>불러오는 중…</b></div></div>';
+      if (!AUTOS.length) return '<div class="aurow"><div class="an"><b>자동화 목록이 비어 있습니다</b>' +
+        '<span>탄야깐 요청관리 > 자동화 ON/OFF 탭을 확인해 주세요.</span></div></div>';
+      var h = '';
+      for (var i = 0; i < AUTOS.length; i++) {
+        var a = AUTOS[i] || {};
+        h += '<div class="aurow">' +
+          '<div class="an"><b>' + esc(a.name || a.key) + '</b><span>' + esc(a.desc || '') + '</span></div>' +
+          '<button type="button" class="autog' + (a.on ? ' on' : '') + '" data-auto="' + esc(a.key) + '"' +
+            ' data-on="' + (a.on ? '1' : '0') + '" role="switch" aria-checked="' + (a.on ? 'true' : 'false') + '"' +
+            ' aria-label="' + esc((a.name || a.key) + (a.on ? ' 켜짐' : ' 꺼짐')) + '"' +
+            ' title="' + (a.on ? '켜짐 · 눌러서 끄기' : '꺼짐 · 눌러서 켜기') + '"><i></i></button>' +
+        '</div>';
+      }
+      return h;
+    }
+
+    function loadAutomations(force) {
+      if (!PIN || !isAdmin_()) return;
+      if (AUTOS_BUSY) return;
+      if (!force && AUTOS && Date.now() - AUTOS_AT < AUTOS_GAP) { paintAutos(); return; }
+      AUTOS_BUSY = true;
+      callApi({ action: 'getAutomations', pin: PIN }).then(function (r) {
+        AUTOS_BUSY = false;
+        if (!r) return;
+        if (r.ok === false) {
+          var box = document.getElementById('autoList');
+          if (box) box.innerHTML = '<div class="aurow"><div class="an"><b>자동화 목록을 받지 못했어요</b>' +
+            '<span>' + esc(r.message || '') + '</span></div></div>';
+          return;
+        }
+        AUTOS = r.automations || [];
+        AUTOS_AT = Date.now();
+        paintAutos();
+      }, function () {
+        AUTOS_BUSY = false;
+        var box = document.getElementById('autoList');
+        if (box) box.innerHTML = '<div class="aurow"><div class="an"><b>연결하지 못했어요</b>' +
+          '<span>잠시 후 [종료] 탭을 다시 열어 주세요.</span></div></div>';
+      });
+    }
+
+    function paintAutos() {
+      var box = document.getElementById('autoList');
+      if (box) box.innerHTML = autoListHtml();
+      var st = document.getElementById('autoStamp');
+      if (!st) return;
+      if (!AUTOS || !AUTOS.length) { st.textContent = ''; return; }
+      var last = '';
+      for (var i = 0; i < AUTOS.length; i++) if (AUTOS[i].changed && AUTOS[i].changed > last) last = AUTOS[i].changed;
+      st.textContent = last ? ('마지막 변경 ' + last) : '';
+    }
+
+    function toggleAuto(key, on, btn) {
+      if (!isAdmin_()) { toast(VIEWER_MSG); return; }
+      if (!PIN || !key) return;
+      if (btn) btn.disabled = true;
+      PENDING++;
+      callApi({ action: 'toggleAutomation', pin: PIN, key: key, on: !!on }).then(function (r) {
+        PENDING--;
+        if (btn) btn.disabled = false;
+        if (!r || r.ok === false) { toast((r && r.message) || '바꾸지 못했어요'); return; }
+        AUTOS = r.automations || AUTOS;
+        AUTOS_AT = Date.now();
+        paintAutos();
+        toast((String(r.status).toUpperCase() === 'ON' ? '켜짐' : '꺼짐') + '으로 저장했어요');
+      }, function () {
+        PENDING--;
+        if (btn) btn.disabled = false;
+        toast('연결하지 못했어요. 다시 시도해 주세요.');
+      });
+    }
+
+    /* ══ v34: 교육대기 '교육 안내 문자' 모달 ═══════════════════════════
+       [예정] 탭의 교육대기 인원 이름을 누르면 열립니다.
+       · 위의 '교육 시작일'을 바꾸면 본문의 연도·월·일·요일이 그 자리에서 함께 바뀝니다.
+       · 본문은 직접 고칠 수 있고, 복사하거나 문자(sms:)로 바로 보낼 수 있습니다. */
+    var EDU = { idx: -1, date: '', last: null };
+    var WD_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+    function eduPad_(n) { return (n < 10 ? '0' : '') + n; }
+    function eduYmd_(d) { return d.getFullYear() + '-' + eduPad_(d.getMonth() + 1) + '-' + eduPad_(d.getDate()); }
+    function eduParse_(s) {
+      var m = String(s == null ? '' : s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+    function eduDateText_(d) {
+      return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + WD_KO[d.getDay()] + ')';
+    }
+    function eduMdText_(d) {
+      return (d.getMonth() + 1) + '월 ' + d.getDate() + '일(' + WD_KO[d.getDay()] + ')';
+    }
+    /* 교육 시작일 기본값 — '교육예정'에 적힌 달의 1일(주말이면 월요일로) */
+    function eduBaseDate_(tr) {
+      var tp = todayParts();
+      var y = tp ? tp.y : new Date().getFullYear();
+      var tm = tp ? tp.m : (new Date().getMonth() + 1);
+      var w = String((tr && tr.when) || '');
+      var mm = w.match(/(\d{1,2})\s*월/);
+      var m = mm ? Number(mm[1]) : tm;
+      if (m < tm) y += 1;                      // '1월 교육'을 12월에 안내하면 다음 해
+      var d = new Date(y, m - 1, 1);
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+      return d;
+    }
+    function eduTemplate_(tr, d) {
+      var name = (tr && tr.name) ? String(tr.name).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      if (!name) name = '선생님';    // '김성재(노인취업지원센터)' → '김성재'
+      var jisa = (tr && tr.jisa) ? String(tr.jisa) : '';
+      return '안녕하세요, ' + name + ' 선생님. 가온누리입니다.\n' +
+        '\n요양보호사 교육 일정을 안내드립니다.\n' +
+        '\n· 교육 시작일: ' + eduDateText_(d) + '\n' +
+        '· 교육 장소·시간: 따로 안내드립니다\n' +
+        '· 준비물: 신분증, 필기도구\n' +
+        '\n교육 시작 전날 다시 연락드리겠습니다.\n' +
+        '\n감사합니다.' + (jisa ? ('\n\n' + jisa + ' 가온누리') : '');
+    }
+    function eduFill_(tr, d, keepEdits) {
+      var ta = document.getElementById('eduMsg');
+      if (!ta || !d) return;
+      var cur = { D: eduDateText_(d), MD: eduMdText_(d), Y: String(d.getFullYear()) };
+      var text = eduTemplate_(tr, d);
+      if (keepEdits && EDU.last && ta.value) {
+        // 본문을 고쳤어도 날짜 글자만 새 값으로 바꿔 줍니다.
+        text = ta.value;
+        if (EDU.last.D && EDU.last.D !== cur.D) text = text.split(EDU.last.D).join(cur.D);
+        if (EDU.last.MD && EDU.last.MD !== cur.MD) text = text.split(EDU.last.MD).join(cur.MD);
+        if (EDU.last.Y && EDU.last.Y !== cur.Y) text = text.split(EDU.last.Y + '년').join(cur.Y + '년');
+      }
+      ta.value = text;
+      EDU.last = cur;
+    }
+    function openEdu(idx) {
+      var tr = (DATA.trainees || [])[idx];
+      if (!tr) return;
+      MODAL = { kind: 'edu', key: tr.name };
+      EDU.idx = idx;
+      EDU.last = null;
+      var base = eduBaseDate_(tr);
+      EDU.date = eduYmd_(base);
+      var info = [];
+      if (tr.when) info.push(whenText_(tr.when));
+      if (tr.jisa) info.push(tr.jisa);
+      if (tr.phone) info.push(tr.phone);
+      document.getElementById('sheetbox').innerHTML =
+        '<h2>' + esc(tr.name) + ' <span class="nbadge">교육대기</span></h2>' +
+        '<div class="mcount">' + esc(info.join(' · ')) + '</div>' +
+        '<div class="edudate"><span>교육 시작일</span><input type="date" id="eduDate" value="' + esc(EDU.date) + '"></div>' +
+        '<textarea class="edumsg" id="eduMsg" spellcheck="false"></textarea>' +
+        '<div class="edubtns">' +
+          '<button class="btn" id="eduDocs">서류·전화</button>' +
+          '<button class="btn" id="eduCopy">복사</button>' +
+          '<button class="btn primary" id="eduSms">문자 보내기</button>' +
+        '</div>' +
+        '<div class="actions"><button class="btn" id="closeModal">닫기</button></div>';
+      document.getElementById('modal').classList.add('open');
+      eduFill_(tr, base, false);
+    }
+    function eduCopy_() {
+      var ta = document.getElementById('eduMsg');
+      if (!ta) return;
+      var txt = ta.value || '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(function () { toast('복사했어요'); },
+            function () { eduCopyFallback_(ta); });
+          return;
+        }
+      } catch (e) {}
+      eduCopyFallback_(ta);
+    }
+    function eduCopyFallback_(ta) {
+      try {
+        ta.focus(); ta.select();
+        var ok = document.execCommand('copy');
+        toast(ok ? '복사했어요' : '길게 눌러 복사해 주세요');
+      } catch (e) { toast('길게 눌러 복사해 주세요'); }
+    }
+    function eduSms_() {
+      var ta = document.getElementById('eduMsg');
+      var tr = (DATA.trainees || [])[EDU.idx];
+      if (!ta || !tr) return;
+      var phone = String(tr.phone || '').replace(/[^0-9+]/g, '');
+      if (!phone) { toast('전화번호가 없어요. 서류·전화에서 확인해 주세요.'); return; }
+      location.href = 'sms:' + phone + '?body=' + encodeURIComponent(ta.value || '');
+    }
+    document.addEventListener('change', function (ev) {
+      if (!ev.target || ev.target.id !== 'eduDate') return;
+      var d = eduParse_(ev.target.value);
+      if (!d) return;
+      EDU.date = ev.target.value;
+      eduFill_((DATA.trainees || [])[EDU.idx], d, true);
+    });
+
     /* v14: 산모 이름 → 근무표 기준 카드체크 일수·날짜별 내역 모달 */
     function openMother(idx) {
       var it = DATA.items[idx];
       if (!it) return;
       MODAL = { kind: 'mother', key: it.mother };
+      // v34: [배정정보] K열에 등록된 바우처 지역 (논산/계룡/부여/… · 일반)
+      var asv = (DATA.motherAssign || {})[it.mother] || null;
+      var vc = (asv && asv.voucher) || it.voucher || '';
+      var vHtml = '<div class="vbadge' + (vc === '일반' ? ' none' : '') + '">바우처 ' + esc(vc || '미등록') + '</div>';
       var st = (DATA.motherStats || {})[it.mother] || null;
       // v19: 일수 집계가 아직 안 왔으면 잠깐 로딩을 보여 주고 바로 채웁니다.
       if (!st && !it.isNormal) {
         document.getElementById('sheetbox').innerHTML =
           '<h2>' + esc(it.mother) + '</h2>' +
+          vHtml +
           '<div class="meta">' + esc(it.caregiver) + ' 관리사 담당</div>' +
           '<div class="mnone" id="statWait">카드체크 일수를 불러오는 중…</div>' +
           '<div class="actions"><button class="btn" id="closeModal">닫기</button></div>';
@@ -1560,6 +1840,7 @@
       document.getElementById('sheetbox').innerHTML =
         '<h2>' + esc(it.mother) + (it.twin && it.groupSize > 1 ? ' <span class="twinmark">쌍둥이</span>' : '') +
           (isNormal ? ' <span class="nbadge">일반</span>' : '') + '</h2>' +
+        vHtml +
         (isNormal
           ? '<div class="mcount">바우처 카드체크 대상 아님 · 앱에서 완료(☑)로 표시</div>' +
             '<div class="nnote">일반 신청 산모는 바우처 카드체크 대상이 아니에요.</div>'
