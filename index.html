@@ -44,6 +44,11 @@
     .line{height:2px;background:#ccd1cb;border-radius:2px;min-width:6px;max-width:100%}
     .care{text-align:left;font-size:13.5px;font-weight:600;color:#3c4043;white-space:nowrap;min-width:0;
       overflow:hidden;text-overflow:ellipsis;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
+    /* v35: 관리사 이름에 '(카드만)' 이 붙은 표기 — 실근무자가 아니라 바우처 카드 명의자만
+       적어 둔 건입니다. 이름·괄호 글자는 그대로 두고 색만 한 단계 연하게 그려
+       실제로 근무하는 관리사와 눈으로 구분합니다. 서류 부족 빨강(.care.bad)이 우선합니다. */
+    .cardonly{color:#9aa0a6}
+    .care.cardonly{color:#9aa0a6}
     .care.bad{color:#D93025;font-weight:700}
     .care .dot{display:inline-block;margin-left:2px;font-size:10px;color:#D93025;vertical-align:top}
     .sms{width:var(--sms);height:26px;border-radius:8px;border:1px solid #e3e6e2;background:#fff;
@@ -92,6 +97,7 @@
     .tnames{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0}
     .tnames .tn{font-size:13px;font-weight:600;color:#4d4436;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis}
+    .tnames .tn.cardonly{color:#a4aaa4}
     .tnames .tnone{font-size:12px;color:#a39a88;white-space:nowrap}
     .ntnote{grid-column:1 / -1;margin-top:6px;padding-top:5px;border-top:1px dashed #f0e6d2;
       font-size:10.5px;color:#a08a63;text-align:right;line-height:1.4}
@@ -109,6 +115,8 @@
       padding:16px 16px 22px}
     .sheetbox h2{margin:0 0 2px;font-size:16px}
     .sheetbox .meta{font-size:12px;color:#70757a;margin-bottom:12px}
+    .sheetbox .meta .cardonly{color:#9aa0a6}
+    .mnote .cardonly{color:#b0b6b0}
     .docs{border-top:1px solid #eef0ed}
     .doc{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #f1f3ef;font-size:13px}
     .doc .nm{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -133,6 +141,7 @@
       align-items:center;min-width:0}
     .chip{display:inline-flex;align-items:center;gap:3px;min-width:0;max-width:100%}
     .chip .cn{color:#2e6b2e;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chip .cn.cardonly{color:#9aa0a6}
     .chip .x{flex:0 0 auto;width:20px;height:20px;border:1px solid #e3e6e2;background:#f7f8f6;
       color:#8a8f8a;border-radius:6px;font-size:10px;line-height:1;padding:0;font-family:inherit}
     .chip .x:active{background:#fdecea;border-color:#f3c9c4;color:#D93025}
@@ -242,6 +251,7 @@
     .pcard .pdate{margin-left:auto;flex:0 0 auto;font-size:12px;font-weight:800;color:#2f4f8f;
       font-variant-numeric:tabular-nums;white-space:nowrap}
     .pcard .psub{display:flex;align-items:center;gap:5px;margin-top:4px;min-width:0}
+    .pcard .pcare.cardonly{color:#b0b6b0}
     .pcard .pcare{flex:1 1 auto;min-width:0;font-size:10.5px;color:#8a8f8a;white-space:nowrap;overflow:hidden;
       text-overflow:ellipsis}
     /* v31.3: 배지 4개는 항상 한 줄(고정폭 58px·가운데 정렬) — 관리사명이 길면 그쪽만 말줄임.
@@ -714,8 +724,49 @@
         '<span class="mark">✓</span>' +
       '</label>';
     }
+    /* ── v35: '(카드만)' 표기 관리사 ─────────────────────────────────
+       [배정정보] 관리사1·2 에 '곽서영(카드만)' 처럼 적힌 건은 실제로 근무하는 관리사가
+       아니라 바우처 카드 명의자만 적어 둔 것입니다. 앱에서는 그 이름을 연한 색으로 그려
+       실제 근무자와 눈으로 구분합니다. (이름·괄호 글자는 그대로 둡니다 — 서버로 보내는
+       값도 바꾸지 않습니다. 카드체크·소급 기록은 이 이름 그대로 저장됩니다.) */
+    var CARDONLY_RE = /카드\s*만/;
+    function isCardName_(name) { return CARDONLY_RE.test(String(name == null ? '' : name)); }
+    /* '(카드만)' 꼬리를 뗀 순수 이름 — 배정정보와 근무표의 이름을 맞출 때 씁니다. */
+    function bareName_(name) {
+      var s = String(name == null ? '' : name).trim();
+      if (!isCardName_(s)) return s;
+      s = s.replace(/\(\s*카드\s*만\s*\)/g, ' ').replace(/카드\s*만/g, ' ');
+      return s.replace(/[\s,·\/]+$/g, '').replace(/\s+/g, ' ').trim();
+    }
+    /* 이 산모의 [배정정보] 가 '(카드만)' 으로 적어 둔 관리사 이름들 (괄호 뗀 이름) */
+    function cardOnlyNames_(mother) {
+      var out = [], as = (DATA.motherAssign || {})[mother], arr, i, v;
+      if (!as) return out;
+      arr = [as.care1, as.care2];
+      for (i = 0; i < arr.length; i++) {
+        v = String(arr[i] == null ? '' : arr[i]).trim();
+        if (!v || !isCardName_(v)) continue;
+        v = bareName_(v);
+        if (v && out.indexOf(v) < 0) out.push(v);
+      }
+      return out;
+    }
+    /* 화면에 그릴 이 관리사 이름이 '카드만' 표기인지
+       — 글자에 (카드만)이 있거나, 이 산모의 [배정정보]가 이 사람을 카드 명의자로 적어 둔 경우 */
+    function cardOnly_(mother, name) {
+      var s = String(name == null ? '' : name);
+      if (isCardName_(s)) return true;
+      var b = bareName_(s);
+      return !!b && cardOnlyNames_(mother).indexOf(b) >= 0;
+    }
+    /* 클래스 문자열에 필요하면 ' cardonly' 를 붙입니다. */
+    function careCls_(base, mother, name) { return base + (cardOnly_(mother, name) ? ' cardonly' : ''); }
+    /* 이름 하나를 그대로 그리는 HTML (괄호·글자 그대로, 색만 카드만이면 연하게) */
+    function nameHtml_(mother, name) {
+      return '<span' + (cardOnly_(mother, name) ? ' class="cardonly"' : '') + '>' + esc(name) + '</span>';
+    }
     function rowHtml(it, idx) {
-      var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
+      var careClass = careCls_('care' + (it.bad > 0 ? ' bad' : ''), it.mother, it.caregiver);
       var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
       var fixed = !!it.isNormal;                       // v16: 일반 산모
       var smsClass = 'sms' + (it.checked || fixed ? ' hide' : '');
@@ -739,7 +790,7 @@
       var lines = '';
       for (var g = 0; g < group.length; g++) {
         var it = group[g], idx = startIdx + g;
-        var careClass = 'care' + (it.bad > 0 ? ' bad' : '');
+        var careClass = careCls_('care' + (it.bad > 0 ? ' bad' : ''), it.mother, it.caregiver);
         var badge = it.bad > 0 ? '<span class="dot">' + it.bad + '</span>' : '';
         var fixed = !!it.isNormal;                       // v16: 일반 산모
         var smsClass = 'sms' + (it.checked || fixed ? ' hide' : '');
@@ -769,7 +820,7 @@
     function tomorrowHtml(it, badge) {
       var cares = (it.caregivers && it.caregivers.length) ? it.caregivers : (it.caregiver ? [it.caregiver] : []);
       var names = '', i;
-      for (i = 0; i < cares.length; i++) names += '<span class="tn">' + esc(cares[i]) + '</span>';
+      for (i = 0; i < cares.length; i++) names += '<span class="tn' + (cardOnly_(it.mother, cares[i]) ? ' cardonly' : '') + '">' + esc(cares[i]) + '</span>';
       if (!names) names = '<span class="tnone">관리사 미정</span>';
       var note = it.noteShort ? '<div class="ntnote">' + esc(it.noteShort) + '</div>' : '';
       return '<div class="row next" title="' + esc(it.start || '') + ' 시작 · 오늘 목록 아님">' +
@@ -970,7 +1021,7 @@
           '<span class="pdate">' + esc(pDate_(p.start)) + '</span>' +
         '</div>' +
         '<div class="psub">' +
-          '<span class="pcare">' + esc(care || '관리사 미정') + '</span>' +
+          '<span class="pcare' + (cardOnly_(p.name, care) ? ' cardonly' : '') + '">' + esc(care || '관리사 미정') + '</span>' +
           '<span class="pbadges">' +
             pBadge_('바우처', p.voucher) + pBadge_('계약서', p.contract) + pBadge_('예약금', p.deposit) +
             pBadge_('자부담', p.selfPay) +
@@ -1504,7 +1555,7 @@
         ? '<a class="btn primary" href="' + esc(it.folder) + '" target="_top">드라이브 서류 폴더 열기</a>'
         : '<span class="btn" style="color:#8a8f8a">폴더를 찾지 못했습니다</span>';
       document.getElementById('sheetbox').innerHTML =
-        '<h2>' + esc(it.caregiver) + '</h2>' +
+        '<h2' + (cardOnly_(it.mother, it.caregiver) ? ' class="cardonly"' : '') + '>' + esc(it.caregiver) + '</h2>' +
         '<div class="meta">' + esc(it.mother) + ' 산모 담당 · ' + esc(head) + '</div>' +
         '<div class="docs">' + rows + '</div>' +
         '<div class="actions">' + drive + '<button class="btn" id="closeModal">닫기</button></div>';
@@ -1772,7 +1823,7 @@
         document.getElementById('sheetbox').innerHTML =
           '<h2>' + esc(it.mother) + '</h2>' +
           vHtml +
-          '<div class="meta">' + esc(it.caregiver) + ' 관리사 담당</div>' +
+          '<div class="meta">' + nameHtml_(it.mother, it.caregiver) + ' 관리사 담당</div>' +
           '<div class="mnone" id="statWait">카드체크 일수를 불러오는 중…</div>' +
           '<div class="actions"><button class="btn" id="closeModal">닫기</button></div>';
         document.getElementById('modal').classList.add('open');
@@ -1804,13 +1855,20 @@
       if (as && (as.start || as.end)) {
         brk.push('배정 ' + (as.start || '?') + ' ~ ' + (as.end || '진행 중'));
       }
-      var note = '';
+      var note = '', noteHtml = '';
       if (recs > total) note = '쌍둥이는 두 관리사가 같은 날 함께 체크하므로 하루로 셉니다.';
       else if (as && (as.care1 || as.care2)) {
-        var cs = [];
-        if (as.care1) cs.push(as.care1 + (as.days1 ? ' ' + as.days1 + '일' : ''));
-        if (as.care2) cs.push(as.care2 + (as.days2 ? ' ' + as.days2 + '일' : ''));
+        var cs = [], ch = [];
+        if (as.care1) {
+          cs.push(as.care1 + (as.days1 ? ' ' + as.days1 + '일' : ''));
+          ch.push(nameHtml_(it.mother, as.care1) + (as.days1 ? ' ' + esc(as.days1) + '일' : ''));
+        }
+        if (as.care2) {
+          cs.push(as.care2 + (as.days2 ? ' ' + as.days2 + '일' : ''));
+          ch.push(nameHtml_(it.mother, as.care2) + (as.days2 ? ' ' + esc(as.days2) + '일' : ''));
+        }
         note = '배정 관리사 ' + cs.join(' · ');
+        noteHtml = '배정 관리사 ' + ch.join(' · ');   // v35: (카드만) 이름은 연한 색으로
       }
       var tp = todayParts();
       var rows = '';
@@ -1822,7 +1880,7 @@
         for (var ci = 0; ci < cares.length; ci++) {
           var cn = cares[ci].trim();
           if (!cn) continue;
-          chips += '<span class="chip"><span class="cn">' + esc(cn) + '</span>' +
+          chips += '<span class="chip"><span class="cn' + (cardOnly_(it.mother, cn) ? ' cardonly' : '') + '">' + esc(cn) + '</span>' +
             ((isToday || !isAdmin_()) ? '' : (function (k, d0, h0) {
               var armed = delArmed_(k);
               return '<button class="x' + (armed ? ' arm' : '') + '" data-del="1" data-armed="' + (armed ? '1' : '0') + '"' +
@@ -1846,7 +1904,7 @@
             '<div class="nnote">일반 신청 산모는 바우처 카드체크 대상이 아니에요.</div>'
           : '<div class="mcount">' + (total ? head + '<b>' + total + '</b>일 체크' : '근무표 체크 0일') + '</div>') +
         (brk.length ? '<div class="mbreak">' + esc(brk.join(' · ')) + '</div>' : '') +
-        (note ? '<div class="mnote">' + esc(note) + '</div>' : '') +
+        (note ? '<div class="mnote">' + (noteHtml || esc(note)) + '</div>' : '') +
         (as && as.end
           ? '<div class="mnote">종료 ' + esc(as.end) + ' · 보건소메일 ' + esc(sendText_(as.mail)) +
             ' · 종료안내문 ' + esc(sendText_(as.letter)) + '</div>'
@@ -1914,7 +1972,7 @@
       if (RETRO.mother !== it.mother) { RETRO = { mother: it.mother, date: '', helper: '' }; }
       var helpers = helperListFor(it), opts = '', i;
       for (i = 0; i < helpers.length; i++) {
-        opts += '<option value="' + esc(helpers[i]) + '"' + (RETRO.helper === helpers[i] ? ' selected' : '') + '>' + esc(helpers[i]) + '</option>';
+        opts += '<option value="' + esc(helpers[i]) + '"' + (cardOnly_(it.mother, helpers[i]) ? ' style="color:#9aa0a6"' : '') + (RETRO.helper === helpers[i] ? ' selected' : '') + '>' + esc(helpers[i]) + '</option>';
       }
       if (!RETRO.helper && helpers.length) RETRO.helper = helpers[0];
       return '<div class="retro">' +
