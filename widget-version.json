@@ -3,7 +3,7 @@
   "versionName": "1.5.2",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
   "notes": "v1.5.2 — 글자·행간 확대(10sp→12.5sp), 종료 인원을 '+N'으로 자르지 않고 위젯 높이에 맞춰 최대 24명까지 표시(머리에 '종료(13)'처럼 총원 표기), 예정의 날짜는 이름이 빨강이어도 항상 검은색, 종료는 3단계 색(모두 완료=검정 · 발송 후 서명 대기=주황 · 미발송=빨강)으로 표시합니다.",
-  "size": 43904,
-  "sha256": "5680de182f2247b1f4ff014af1065accc6da7290f7d18461c6e57e05f981023e",
+  "size": 43896,
+  "sha256": "f082a66fa3b8a39be9a2d7957ebf49372c6b95c337c83ffee73f5faf4922386c",
   "updatedAt": "2026-11-28"
 }
