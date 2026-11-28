@@ -412,6 +412,15 @@
     var DATA = { items: [], checked: 0, total: 0 };
     /* v23: 지금 보고 있는 날짜 (서버가 준 view). isToday 일 때만 카드체크·자동 동기화 */
     var VIEW = { date: '', isToday: true, isPast: false, isFuture: false, offset: 0, short: '' };
+
+    /* v36.1 (위젯 v1.5): 바탕화면 위젯에서 ?tab=ended|today|upcoming 으로 열면 그 탭부터 보여 줍니다.
+       잠금 화면을 거치므로 데이터를 받은 뒤(unlock/load) 한 번만 씁니다. */
+    var START_TAB = (function () {
+      try {
+        var m = /[?&]tab=(ended|today|upcoming)/.exec(location.search);
+        return m ? m[1] : '';
+      } catch (e) { return ''; }
+    })();
     /* v28: 보고 있는 날짜가 주말(토·일)인지 — 주말은 기본 휴무 문구를 씁니다. */
     var IS_WEEKEND = false;
     /* v15: 실시간 반영 상태
@@ -650,7 +659,10 @@
           hideLock();
           lockMsg('');
           applyResponse(r);              // v30: 세 탭을 한 번에 받아 메모리에
-          renderPayload(viewKey_());     // 보고 있던 탭 그대로
+          // v36.1: 위젯에서 지정한 탭(종료/예정)이 있으면 그 탭부터, 없으면 보던 탭 그대로
+          var k0 = (START_TAB && payloadOf(START_TAB)) ? START_TAB : viewKey_();
+          START_TAB = '';
+          renderPayload(k0);
           PERF.netPaint = Math.round(nowMs_() - BOOT_T0);
           loadStats(false);          // v19: 일수·날짜 내역은 뒤에서
         } else {
@@ -1242,7 +1254,10 @@
       callAll(PIN).then(function (r) {
         if (!r || r.ok === false) { lockNow((r && r.message) || '다시 잠갔습니다.'); return; }
         applyResponse(r);                 // v30: 세 탭을 한 번에
-        renderPayload(viewKey_());
+        // v36.1: 위젯에서 지정한 탭이 남아 있으면 그 탭부터
+        var k1 = (START_TAB && payloadOf(START_TAB)) ? START_TAB : viewKey_();
+        START_TAB = '';
+        renderPayload(k1);
         loadStats(false);
         refreshModal();
       }, function (e) {
@@ -2100,7 +2115,7 @@
         if (cached) {
           setAll(cached.all.today, cached.all.ended, cached.all.upcoming);
           hideLock();
-          renderPayload(cached.last || 'today');
+          renderPayload(START_TAB || cached.last || 'today');   // v36.1: 위젯이 지정한 탭 우선
           PERF.cachePaint = Math.round(nowMs_() - BOOT_T0);
         } else {
           lockMsg('확인 중…');
