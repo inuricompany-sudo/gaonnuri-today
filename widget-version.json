@@ -2,8 +2,8 @@
   "versionCode": 6,
   "versionName": "1.5",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
-  "notes": "v1.5 — 3열 초압축형: 종료 | 오늘 근무쌍 | 예정(11/30 이름). 조치가 필요한 이름은 빨간색. 열을 누르면 웹앱의 그 탭이 열립니다. 배경·굵게 동적 호출을 없애 삼성 '위젯을 로드할 수 없습니다'를 막았습니다.",
-  "size": 41852,
-  "sha256": "a94af16c6d4a7baca95e3c6b5abe65379fedaff75178e940d1d5dc25c6ee3efa",
+  "notes": "v1.5 — 3열 초압축형: 종료 | 오늘 근무쌍 | 예정(11/30 이름). 조치가 필요한 이름은 빨간색. 열을 누르면 웹앱의 그 탭이 열립니다. 위젯을 LinearLayout·TextView만으로 다시 그려 삼성 '위젯을 로드할 수 없습니다'를 막았습니다.",
+  "size": 42912,
+  "sha256": "9b06a1626242628a0e20740d94e8574724e59652f938c0386e9947e59ddea3d7",
   "updatedAt": "2026-11-28"
 }
