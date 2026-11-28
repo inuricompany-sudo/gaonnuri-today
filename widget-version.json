@@ -1,9 +1,9 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4",
+  "versionCode": 6,
+  "versionName": "1.5",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
-  "notes": "v1.4 — 자동 업데이트 추가. 새 버전이 나오면 위젯 제목줄에 '🔄 v1.4' 배지가 뜨고, 누르면 내려받아 설치 화면이 열립니다. 카드체크·주말 휴무·서류 미비 빨강 등 기존 화면은 그대로입니다.",
-  "size": 40700,
-  "sha256": "c8a3b8fa00efc08d797e97e0b1884c0b270115dc897623bb316968430b060108",
+  "notes": "v1.5 — 3열 초압축형: 종료 | 오늘 근무쌍 | 예정(11/30 이름). 조치가 필요한 이름은 빨간색. 열을 누르면 웹앱의 그 탭이 열립니다. 배경·굵게 동적 호출을 없애 삼성 '위젯을 로드할 수 없습니다'를 막았습니다.",
+  "size": 41852,
+  "sha256": "a94af16c6d4a7baca95e3c6b5abe65379fedaff75178e940d1d5dc25c6ee3efa",
   "updatedAt": "2026-11-28"
 }
