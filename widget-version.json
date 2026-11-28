@@ -3,7 +3,7 @@
   "versionName": "1.4",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
   "notes": "v1.4 — 자동 업데이트 추가. 새 버전이 나오면 위젯 제목줄에 '🔄 v1.4' 배지가 뜨고, 누르면 내려받아 설치 화면이 열립니다. 카드체크·주말 휴무·서류 미비 빨강 등 기존 화면은 그대로입니다.",
-  "size": 40688,
-  "sha256": "b99da5e2f0fe7a10e4453a88d4e8a4bcb2e4ba626614502ce9fb80123e6861c8",
+  "size": 40700,
+  "sha256": "c8a3b8fa00efc08d797e97e0b1884c0b270115dc897623bb316968430b060108",
   "updatedAt": "2026-11-28"
 }
