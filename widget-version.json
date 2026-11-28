@@ -1,9 +1,9 @@
 {
-  "versionCode": 6,
-  "versionName": "1.5",
+  "versionCode": 7,
+  "versionName": "1.5.1",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
-  "notes": "v1.5 — 3열 초압축형: 종료 | 오늘 근무쌍 | 예정(11/30 이름). 조치가 필요한 이름은 빨간색. 열을 누르면 웹앱의 그 탭이 열립니다. 위젯을 LinearLayout·TextView만으로 다시 그려 삼성 '위젯을 로드할 수 없습니다'를 막았습니다.",
-  "size": 42912,
-  "sha256": "9b06a1626242628a0e20740d94e8574724e59652f938c0386e9947e59ddea3d7",
+  "notes": "v1.5.1 — 업데이트 내려받기 오류 수정: v1.5에서 '연결이 열린 뒤 요청 속성을 바꿀 수 없습니다(Cannot set request property after connection is made)' 오류로 APK 내려받기가 실패하던 문제를 고쳤습니다. 위젯 화면·표시 방식은 v1.5와 같습니다.",
+  "size": 42892,
+  "sha256": "c53d1d5941b9276867fafcee2be373be42fd030e103264ceec40fbc9df67b175",
   "updatedAt": "2026-11-28"
 }
