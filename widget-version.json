@@ -1,9 +1,9 @@
 {
-  "versionCode": 7,
-  "versionName": "1.5.1",
+  "versionCode": 8,
+  "versionName": "1.5.2",
   "apkUrl": "https://drive.usercontent.google.com/download?id=1Su641jV2nkGJCSPtL2Z-I_TnTUJHZDUv&export=download&confirm=t",
-  "notes": "v1.5.1 — 업데이트 내려받기 오류 수정: v1.5에서 '연결이 열린 뒤 요청 속성을 바꿀 수 없습니다(Cannot set request property after connection is made)' 오류로 APK 내려받기가 실패하던 문제를 고쳤습니다. 위젯 화면·표시 방식은 v1.5와 같습니다.",
-  "size": 42892,
-  "sha256": "c53d1d5941b9276867fafcee2be373be42fd030e103264ceec40fbc9df67b175",
+  "notes": "v1.5.2 — 글자·행간 확대(10sp→12.5sp), 종료 인원을 '+N'으로 자르지 않고 위젯 높이에 맞춰 최대 24명까지 표시(머리에 '종료(13)'처럼 총원 표기), 예정의 날짜는 이름이 빨강이어도 항상 검은색, 종료는 3단계 색(모두 완료=검정 · 발송 후 서명 대기=주황 · 미발송=빨강)으로 표시합니다.",
+  "size": 43576,
+  "sha256": "2778ed22f0d249911afcf7746ebdb2cd6f9a60261cbf3861f277de74450af26c",
   "updatedAt": "2026-11-28"
 }
